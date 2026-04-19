@@ -49,16 +49,17 @@ PSI_BINS = int(os.getenv("PSI_BINS", "10"))
 
 # ── Data structures ───────────────────────────────────────────────────────────
 
+
 @dataclass
 class FeatureDriftResult:
     feature: str
-    dtype: str                    # "numerical" | "categorical"
-    method: str                   # "ks" | "chi2"
+    dtype: str  # "numerical" | "categorical"
+    method: str  # "ks" | "chi2"
     statistic: float
     p_value: float
     psi: Optional[float]
     drifted: bool
-    severity: str                 # "none" | "warning" | "critical"
+    severity: str  # "none" | "warning" | "critical"
     ref_mean: Optional[float] = None
     cur_mean: Optional[float] = None
     ref_std: Optional[float] = None
@@ -112,6 +113,7 @@ class DriftReport:
 
 # ── PSI ──────────────────────────────────────────────────────────────────────
 
+
 def _psi_numerical(ref: np.ndarray, cur: np.ndarray, bins: int = PSI_BINS) -> float:
     """Population Stability Index for a numerical feature."""
     eps = 1e-8
@@ -153,23 +155,38 @@ def _psi_severity(psi: float) -> str:
 
 # ── Per-feature drift ─────────────────────────────────────────────────────────
 
-def _drift_numerical(feature: str, ref: pd.Series, cur: pd.Series) -> FeatureDriftResult:
+
+def _drift_numerical(
+    feature: str, ref: pd.Series, cur: pd.Series
+) -> FeatureDriftResult:
     r, c = ref.dropna().values, cur.dropna().values
     stat, p = stats.ks_2samp(r, c)
     psi = _psi_numerical(r, c)
     drifted = p < KS_P_THRESHOLD
-    severity = "critical" if drifted and psi >= PSI_CRITICAL else \
-               "warning"  if drifted or psi >= PSI_WARNING else "none"
+    severity = (
+        "critical"
+        if drifted and psi >= PSI_CRITICAL
+        else "warning" if drifted or psi >= PSI_WARNING else "none"
+    )
     return FeatureDriftResult(
-        feature=feature, dtype="numerical", method="ks",
-        statistic=round(float(stat), 6), p_value=round(float(p), 6),
-        psi=psi, drifted=drifted, severity=severity,
-        ref_mean=round(float(ref.mean()), 4), cur_mean=round(float(cur.mean()), 4),
-        ref_std=round(float(ref.std()), 4), cur_std=round(float(cur.std()), 4),
+        feature=feature,
+        dtype="numerical",
+        method="ks",
+        statistic=round(float(stat), 6),
+        p_value=round(float(p), 6),
+        psi=psi,
+        drifted=drifted,
+        severity=severity,
+        ref_mean=round(float(ref.mean()), 4),
+        cur_mean=round(float(cur.mean()), 4),
+        ref_std=round(float(ref.std()), 4),
+        cur_std=round(float(cur.std()), 4),
     )
 
 
-def _drift_categorical(feature: str, ref: pd.Series, cur: pd.Series) -> FeatureDriftResult:
+def _drift_categorical(
+    feature: str, ref: pd.Series, cur: pd.Series
+) -> FeatureDriftResult:
     categories = list(set(ref.unique()) | set(cur.unique()))
     ref_counts = ref.value_counts().reindex(categories, fill_value=0)
     cur_counts = cur.value_counts().reindex(categories, fill_value=0)
@@ -177,9 +194,14 @@ def _drift_categorical(feature: str, ref: pd.Series, cur: pd.Series) -> FeatureD
     # Chi-square needs at least 1 expected count per cell
     if ref_counts.sum() == 0 or cur_counts.sum() == 0:
         return FeatureDriftResult(
-            feature=feature, dtype="categorical", method="chi2",
-            statistic=0.0, p_value=1.0, psi=0.0,
-            drifted=False, severity="none",
+            feature=feature,
+            dtype="categorical",
+            method="chi2",
+            statistic=0.0,
+            p_value=1.0,
+            psi=0.0,
+            drifted=False,
+            severity="none",
         )
 
     stat, p = stats.chisquare(
@@ -193,29 +215,50 @@ def _drift_categorical(feature: str, ref: pd.Series, cur: pd.Series) -> FeatureD
     ref_top = ref.value_counts(normalize=True).head(top_n).round(4).to_dict()
     cur_top = cur.value_counts(normalize=True).head(top_n).round(4).to_dict()
 
-    severity = "critical" if drifted and psi >= PSI_CRITICAL else \
-               "warning"  if drifted or psi >= PSI_WARNING else "none"
+    severity = (
+        "critical"
+        if drifted and psi >= PSI_CRITICAL
+        else "warning" if drifted or psi >= PSI_WARNING else "none"
+    )
     return FeatureDriftResult(
-        feature=feature, dtype="categorical", method="chi2",
-        statistic=round(float(stat), 6), p_value=round(float(p), 6),
-        psi=psi, drifted=drifted, severity=severity,
-        ref_top_values=ref_top, cur_top_values=cur_top,
+        feature=feature,
+        dtype="categorical",
+        method="chi2",
+        statistic=round(float(stat), 6),
+        p_value=round(float(p), 6),
+        psi=psi,
+        drifted=drifted,
+        severity=severity,
+        ref_top_values=ref_top,
+        cur_top_values=cur_top,
     )
 
 
 # ── Prediction drift ──────────────────────────────────────────────────────────
 
-def _drift_predictions(ref_logs: pd.DataFrame, cur_logs: pd.DataFrame) -> PredictionDriftResult:
+
+def _drift_predictions(
+    ref_logs: pd.DataFrame, cur_logs: pd.DataFrame
+) -> PredictionDriftResult:
     """Drift on predicted_class distribution + confidence mean shift."""
     result = PredictionDriftResult()
 
-    if "predicted_class" not in ref_logs.columns or "predicted_class" not in cur_logs.columns:
+    if (
+        "predicted_class" not in ref_logs.columns
+        or "predicted_class" not in cur_logs.columns
+    ):
         return result
 
-    categories = list(set(ref_logs["predicted_class"].unique()) |
-                      set(cur_logs["predicted_class"].unique()))
-    ref_counts = ref_logs["predicted_class"].value_counts().reindex(categories, fill_value=0)
-    cur_counts = cur_logs["predicted_class"].value_counts().reindex(categories, fill_value=0)
+    categories = list(
+        set(ref_logs["predicted_class"].unique())
+        | set(cur_logs["predicted_class"].unique())
+    )
+    ref_counts = (
+        ref_logs["predicted_class"].value_counts().reindex(categories, fill_value=0)
+    )
+    cur_counts = (
+        cur_logs["predicted_class"].value_counts().reindex(categories, fill_value=0)
+    )
 
     stat, p = stats.chisquare(
         f_obs=cur_counts.values + 1e-8,
@@ -228,10 +271,17 @@ def _drift_predictions(ref_logs: pd.DataFrame, cur_logs: pd.DataFrame) -> Predic
     result.p_value = round(float(p), 6)
     result.drifted = drifted
     result.psi = psi
-    result.severity = _psi_severity(psi) if not drifted else \
-                      ("critical" if psi >= PSI_CRITICAL else "warning")
-    result.ref_class_dist = ref_logs["predicted_class"].value_counts(normalize=True).round(4).to_dict()
-    result.cur_class_dist = cur_logs["predicted_class"].value_counts(normalize=True).round(4).to_dict()
+    result.severity = (
+        _psi_severity(psi)
+        if not drifted
+        else ("critical" if psi >= PSI_CRITICAL else "warning")
+    )
+    result.ref_class_dist = (
+        ref_logs["predicted_class"].value_counts(normalize=True).round(4).to_dict()
+    )
+    result.cur_class_dist = (
+        cur_logs["predicted_class"].value_counts(normalize=True).round(4).to_dict()
+    )
 
     if "confidence" in ref_logs.columns and "confidence" in cur_logs.columns:
         result.ref_confidence_mean = round(float(ref_logs["confidence"].mean()), 4)
@@ -241,6 +291,7 @@ def _drift_predictions(ref_logs: pd.DataFrame, cur_logs: pd.DataFrame) -> Predic
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
+
 
 def compute_drift_report(
     reference_df: pd.DataFrame,
@@ -273,17 +324,21 @@ def compute_drift_report(
     # Auto-detect feature types if not supplied
     common_cols = [c for c in reference_df.columns if c in current_df.columns]
     if numerical_features is None:
-        numerical_features = [c for c in common_cols
-                              if pd.api.types.is_numeric_dtype(reference_df[c])]
+        numerical_features = [
+            c for c in common_cols if pd.api.types.is_numeric_dtype(reference_df[c])
+        ]
     if categorical_features is None:
-        categorical_features = [c for c in common_cols
-                                 if not pd.api.types.is_numeric_dtype(reference_df[c])]
+        categorical_features = [
+            c for c in common_cols if not pd.api.types.is_numeric_dtype(reference_df[c])
+        ]
 
     feature_results: List[FeatureDriftResult] = []
 
     for feat in numerical_features:
         if feat not in reference_df.columns or feat not in current_df.columns:
-            log.warning("Numerical feature '%s' missing in one dataset, skipping.", feat)
+            log.warning(
+                "Numerical feature '%s' missing in one dataset, skipping.", feat
+            )
             continue
         try:
             result = _drift_numerical(feat, reference_df[feat], current_df[feat])
@@ -293,7 +348,9 @@ def compute_drift_report(
 
     for feat in categorical_features:
         if feat not in reference_df.columns or feat not in current_df.columns:
-            log.warning("Categorical feature '%s' missing in one dataset, skipping.", feat)
+            log.warning(
+                "Categorical feature '%s' missing in one dataset, skipping.", feat
+            )
             continue
         try:
             result = _drift_categorical(feat, reference_df[feat], current_df[feat])
@@ -322,7 +379,9 @@ def compute_drift_report(
         "critical_count": severities.count("critical"),
         "warning_count": severities.count("warning"),
         "prediction_drifted": pred_drift.drifted,
-        "drift_rate_pct": round(len(drifted_features) / max(len(feature_results), 1) * 100, 1),
+        "drift_rate_pct": round(
+            len(drifted_features) / max(len(feature_results), 1) * 100, 1
+        ),
     }
 
     report = DriftReport(
@@ -345,7 +404,11 @@ def compute_drift_report(
 
     log.info(
         "Drift report %s | drifted=%s | features=%d/%d | prediction=%s",
-        report_id, overall_drifted, len(drifted_features), len(feature_results), pred_drift.drifted,
+        report_id,
+        overall_drifted,
+        len(drifted_features),
+        len(feature_results),
+        pred_drift.drifted,
     )
     return report
 
@@ -359,4 +422,6 @@ def load_latest_drift_report() -> Optional[DriftReport]:
         data = json.load(f)
     feature_results = [FeatureDriftResult(**r) for r in data.pop("feature_results", [])]
     pred_drift = PredictionDriftResult(**data.pop("prediction_drift", {}))
-    return DriftReport(**data, feature_results=feature_results, prediction_drift=pred_drift)
+    return DriftReport(
+        **data, feature_results=feature_results, prediction_drift=pred_drift
+    )

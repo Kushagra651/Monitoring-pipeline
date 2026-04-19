@@ -28,106 +28,108 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 # is the #1 cause of silent model degradation in production.
 # ---------------------------------------------------------------------------
 
+
 class WorkclassEnum(str, Enum):
-    PRIVATE         = "Private"
+    PRIVATE = "Private"
     SELF_EMP_NOT_INC = "Self-emp-not-inc"
-    SELF_EMP_INC    = "Self-emp-inc"
-    FEDERAL_GOV     = "Federal-gov"
-    LOCAL_GOV       = "Local-gov"
-    STATE_GOV       = "State-gov"
-    WITHOUT_PAY     = "Without-pay"
-    NEVER_WORKED    = "Never-worked"
+    SELF_EMP_INC = "Self-emp-inc"
+    FEDERAL_GOV = "Federal-gov"
+    LOCAL_GOV = "Local-gov"
+    STATE_GOV = "State-gov"
+    WITHOUT_PAY = "Without-pay"
+    NEVER_WORKED = "Never-worked"
 
 
 class EducationEnum(str, Enum):
-    BACHELORS       = "Bachelors"
-    SOME_COLLEGE    = "Some-college"
-    ELEVENTH        = "11th"
-    HS_GRAD         = "HS-grad"
-    PROF_SCHOOL     = "Prof-school"
-    ASSOC_ACDM      = "Assoc-acdm"
-    ASSOC_VOC       = "Assoc-voc"
-    NINTH           = "9th"
-    SEVENTH_EIGHTH  = "7th-8th"
-    TWELFTH         = "12th"
-    MASTERS         = "Masters"
-    FIRST_FOURTH    = "1st-4th"
-    TENTH           = "10th"
-    DOCTORATE       = "Doctorate"
-    FIFTH_SIXTH     = "5th-6th"
-    PRESCHOOL       = "Preschool"
+    BACHELORS = "Bachelors"
+    SOME_COLLEGE = "Some-college"
+    ELEVENTH = "11th"
+    HS_GRAD = "HS-grad"
+    PROF_SCHOOL = "Prof-school"
+    ASSOC_ACDM = "Assoc-acdm"
+    ASSOC_VOC = "Assoc-voc"
+    NINTH = "9th"
+    SEVENTH_EIGHTH = "7th-8th"
+    TWELFTH = "12th"
+    MASTERS = "Masters"
+    FIRST_FOURTH = "1st-4th"
+    TENTH = "10th"
+    DOCTORATE = "Doctorate"
+    FIFTH_SIXTH = "5th-6th"
+    PRESCHOOL = "Preschool"
 
 
 class MaritalStatusEnum(str, Enum):
-    MARRIED_CIV         = "Married-civ-spouse"
-    DIVORCED            = "Divorced"
-    NEVER_MARRIED       = "Never-married"
-    SEPARATED           = "Separated"
-    WIDOWED             = "Widowed"
+    MARRIED_CIV = "Married-civ-spouse"
+    DIVORCED = "Divorced"
+    NEVER_MARRIED = "Never-married"
+    SEPARATED = "Separated"
+    WIDOWED = "Widowed"
     MARRIED_SPOUSE_ABSENT = "Married-spouse-absent"
-    MARRIED_AF          = "Married-AF-spouse"
+    MARRIED_AF = "Married-AF-spouse"
 
 
 class OccupationEnum(str, Enum):
-    TECH_SUPPORT        = "Tech-support"
-    CRAFT_REPAIR        = "Craft-repair"
-    OTHER_SERVICE       = "Other-service"
-    SALES               = "Sales"
-    EXEC_MANAGERIAL     = "Exec-managerial"
-    PROF_SPECIALTY      = "Prof-specialty"
-    HANDLERS_CLEANERS   = "Handlers-cleaners"
-    MACHINE_OP_INSPCT   = "Machine-op-inspct"
-    ADM_CLERICAL        = "Adm-clerical"
-    FARMING_FISHING     = "Farming-fishing"
-    TRANSPORT_MOVING    = "Transport-moving"
-    PRIV_HOUSE_SERV     = "Priv-house-serv"
-    PROTECTIVE_SERV     = "Protective-serv"
-    ARMED_FORCES        = "Armed-Forces"
+    TECH_SUPPORT = "Tech-support"
+    CRAFT_REPAIR = "Craft-repair"
+    OTHER_SERVICE = "Other-service"
+    SALES = "Sales"
+    EXEC_MANAGERIAL = "Exec-managerial"
+    PROF_SPECIALTY = "Prof-specialty"
+    HANDLERS_CLEANERS = "Handlers-cleaners"
+    MACHINE_OP_INSPCT = "Machine-op-inspct"
+    ADM_CLERICAL = "Adm-clerical"
+    FARMING_FISHING = "Farming-fishing"
+    TRANSPORT_MOVING = "Transport-moving"
+    PRIV_HOUSE_SERV = "Priv-house-serv"
+    PROTECTIVE_SERV = "Protective-serv"
+    ARMED_FORCES = "Armed-Forces"
 
 
 class RelationshipEnum(str, Enum):
-    WIFE                = "Wife"
-    OWN_CHILD           = "Own-child"
-    HUSBAND             = "Husband"
-    NOT_IN_FAMILY       = "Not-in-family"
-    OTHER_RELATIVE      = "Other-relative"
-    UNMARRIED           = "Unmarried"
+    WIFE = "Wife"
+    OWN_CHILD = "Own-child"
+    HUSBAND = "Husband"
+    NOT_IN_FAMILY = "Not-in-family"
+    OTHER_RELATIVE = "Other-relative"
+    UNMARRIED = "Unmarried"
 
 
 class RaceEnum(str, Enum):
-    WHITE               = "White"
-    ASIAN_PAC_ISLANDER  = "Asian-Pac-Islander"
-    AMER_INDIAN_ESKIMO  = "Amer-Indian-Eskimo"
-    OTHER               = "Other"
-    BLACK               = "Black"
+    WHITE = "White"
+    ASIAN_PAC_ISLANDER = "Asian-Pac-Islander"
+    AMER_INDIAN_ESKIMO = "Amer-Indian-Eskimo"
+    OTHER = "Other"
+    BLACK = "Black"
 
 
 class SexEnum(str, Enum):
-    MALE    = "Male"
-    FEMALE  = "Female"
+    MALE = "Male"
+    FEMALE = "Female"
 
 
 class CountryEnum(str, Enum):
-    UNITED_STATES   = "United-States"
-    CUBA            = "Cuba"
-    JAMAICA         = "Jamaica"
-    INDIA           = "India"
-    MEXICO          = "Mexico"
-    SOUTH           = "South"
-    JAPAN           = "Japan"
-    CHINA           = "China"
-    PHILIPPINES     = "Philippines"
-    GERMANY         = "Germany"
-    PUERTO_RICO     = "Puerto-Rico"
-    CANADA          = "Canada"
-    EL_SALVADOR     = "El-Salvador"
-    INDIA2          = "India"
-    OTHER           = "Other"
+    UNITED_STATES = "United-States"
+    CUBA = "Cuba"
+    JAMAICA = "Jamaica"
+    INDIA = "India"
+    MEXICO = "Mexico"
+    SOUTH = "South"
+    JAPAN = "Japan"
+    CHINA = "China"
+    PHILIPPINES = "Philippines"
+    GERMANY = "Germany"
+    PUERTO_RICO = "Puerto-Rico"
+    CANADA = "Canada"
+    EL_SALVADOR = "El-Salvador"
+    INDIA2 = "India"
+    OTHER = "Other"
 
 
 # ---------------------------------------------------------------------------
 # Core input schema — one record sent to /predict
 # ---------------------------------------------------------------------------
+
 
 class PredictionInput(BaseModel):
     """
@@ -139,37 +141,43 @@ class PredictionInput(BaseModel):
     # Numeric features
     age: int = Field(
         ...,
-        ge=17, le=90,
+        ge=17,
+        le=90,
         description="Age of the individual. UCI range: 17–90.",
         examples=[35],
     )
     fnlwgt: int = Field(
         ...,
-        ge=10_000, le=1_500_000,
+        ge=10_000,
+        le=1_500_000,
         description="Final sampling weight assigned by the Census Bureau.",
         examples=[215_646],
     )
     education_num: int = Field(
         ...,
-        ge=1, le=16,
+        ge=1,
+        le=16,
         description="Ordinal encoding of education level (1=Preschool, 16=Doctorate).",
         examples=[9],
     )
     capital_gain: int = Field(
         ...,
-        ge=0, le=99_999,
+        ge=0,
+        le=99_999,
         description="Capital gains recorded in the census year.",
         examples=[0],
     )
     capital_loss: int = Field(
         ...,
-        ge=0, le=4_356,
+        ge=0,
+        le=4_356,
         description="Capital losses recorded in the census year.",
         examples=[0],
     )
     hours_per_week: int = Field(
         ...,
-        ge=1, le=99,
+        ge=1,
+        le=99,
         description="Self-reported hours worked per week.",
         examples=[40],
     )
@@ -253,6 +261,7 @@ class PredictionInput(BaseModel):
 # Prediction response — what the API returns to the caller
 # ---------------------------------------------------------------------------
 
+
 class PredictionOutput(BaseModel):
     """
     Response returned from /predict.
@@ -271,7 +280,8 @@ class PredictionOutput(BaseModel):
     )
     probability_above_50k: float = Field(
         ...,
-        ge=0.0, le=1.0,
+        ge=0.0,
+        le=1.0,
         description="Calibrated probability that income exceeds $50K.",
         examples=[0.73],
     )
@@ -299,6 +309,7 @@ class PredictionOutput(BaseModel):
 # Superset of PredictionOutput: includes the raw input for drift monitoring.
 # ---------------------------------------------------------------------------
 
+
 class PredictionLog(BaseModel):
     """
     Full record persisted to the `predictions` table in PostgreSQL.
@@ -322,20 +333,28 @@ class PredictionLog(BaseModel):
 # Health-check response — used by /health endpoint and Docker health checks
 # ---------------------------------------------------------------------------
 
+
 class HealthResponse(BaseModel):
     status: str = Field(..., examples=["ok"])
     model_version: str = Field(..., examples=["1"])
     model_stage: str = Field(..., examples=["Production"])
-    uptime_seconds: float = Field(..., description="Seconds since the API process started.")
+    uptime_seconds: float = Field(
+        ..., description="Seconds since the API process started."
+    )
 
 
 # ---------------------------------------------------------------------------
 # Error response — consistent error envelope across all 4xx / 5xx responses
 # ---------------------------------------------------------------------------
 
+
 class ErrorResponse(BaseModel):
-    error: str = Field(..., description="Machine-readable error code.", examples=["validation_error"])
-    detail: str = Field(..., description="Human-readable description of what went wrong.")
+    error: str = Field(
+        ..., description="Machine-readable error code.", examples=["validation_error"]
+    )
+    detail: str = Field(
+        ..., description="Human-readable description of what went wrong."
+    )
     request_id: Optional[UUID] = Field(
         default=None,
         description="Echo of prediction_id if the error occurred mid-prediction.",

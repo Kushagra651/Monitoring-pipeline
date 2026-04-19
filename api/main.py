@@ -58,13 +58,16 @@ _START_TIME = time.time()
 
 # ── Lifespan ──────────────────────────────────────────────────────────────────
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     log.info("Starting ML Monitoring API...")
     try:
         predictor_module._ensure_loaded()
         info = get_model_info()
-        log.info("Model loaded: version=%s alias=%s", info.get("version"), info.get("alias"))
+        log.info(
+            "Model loaded: version=%s alias=%s", info.get("version"), info.get("alias")
+        )
     except FileNotFoundError as e:
         log.warning("Model not found at startup (run training first): %s", e)
     except Exception as e:
@@ -96,18 +99,20 @@ app.add_middleware(
 
 # ── Middleware — latency header + hot-reload check ────────────────────────────
 
+
 @app.middleware("http")
 async def track_latency(request: Request, call_next):
     start = time.perf_counter()
     response: Response = await call_next(request)
     latency_ms = (time.perf_counter() - start) * 1000
     if request.url.path == "/predict":
-        reload_if_stale()   # cheap stat() check on every predict request
+        reload_if_stale()  # cheap stat() check on every predict request
     response.headers["X-Latency-Ms"] = f"{latency_ms:.2f}"
     return response
 
 
 # ── Health / readiness ────────────────────────────────────────────────────────
+
 
 @app.get("/health", response_model=HealthResponse, tags=["ops"])
 def health():
@@ -129,6 +134,7 @@ def ready():
 
 
 # ── Inference ─────────────────────────────────────────────────────────────────
+
 
 @app.post("/predict", response_model=PredictionOutput, tags=["inference"])
 def predict_endpoint(req: PredictionInput):
@@ -173,6 +179,7 @@ def predict_endpoint(req: PredictionInput):
 
 # ── Ops ───────────────────────────────────────────────────────────────────────
 
+
 @app.post("/model/reload", tags=["ops"])
 def reload_model():
     """Force hot-reload of model from registry without container restart."""
@@ -192,6 +199,7 @@ def model_info():
 
 
 # ── Monitoring ────────────────────────────────────────────────────────────────
+
 
 @app.get("/metrics", tags=["monitoring"])
 def prometheus_metrics():

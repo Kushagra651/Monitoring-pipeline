@@ -19,6 +19,7 @@ UCI dataset source:
 from __future__ import annotations
 
 import logging
+
 # import os
 from pathlib import Path
 
@@ -41,16 +42,16 @@ log = logging.getLogger(__name__)
 
 # Raw UCI download URLs
 UCI_BASE_URL = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult"
-TRAIN_URL    = f"{UCI_BASE_URL}/adult.data"
-TEST_URL     = f"{UCI_BASE_URL}/adult.test"
+TRAIN_URL = f"{UCI_BASE_URL}/adult.data"
+TEST_URL = f"{UCI_BASE_URL}/adult.test"
 
 # Local paths
-RAW_DIR          = Path("data/raw")
-FEATURE_STORE    = Path("data/feature_store")
-RAW_TRAIN_CSV    = RAW_DIR / "adult_train.csv"
-RAW_TEST_CSV     = RAW_DIR / "adult_test.csv"
+RAW_DIR = Path("data/raw")
+FEATURE_STORE = Path("data/feature_store")
+RAW_TRAIN_CSV = RAW_DIR / "adult_train.csv"
+RAW_TEST_CSV = RAW_DIR / "adult_test.csv"
 CLEAN_TRAIN_FILE = FEATURE_STORE / "train.parquet"
-CLEAN_TEST_FILE  = FEATURE_STORE / "test.parquet"
+CLEAN_TEST_FILE = FEATURE_STORE / "test.parquet"
 
 # Column names — UCI dataset ships with no header row
 COLUMN_NAMES = [
@@ -68,15 +69,15 @@ COLUMN_NAMES = [
     "capital_loss",
     "hours_per_week",
     "native_country",
-    "income",               # target: ">50K" or "<=50K"
+    "income",  # target: ">50K" or "<=50K"
 ]
 
 # Target label mapping — normalise to clean strings without trailing periods
 # The test split has labels like ">50K." (with a dot) — we strip that.
 LABEL_MAP = {
-    ">50K" : ">50K",
+    ">50K": ">50K",
     ">50K.": ">50K",
-    "<=50K" : "<=50K",
+    "<=50K": "<=50K",
     "<=50K.": "<=50K",
 }
 
@@ -84,6 +85,7 @@ LABEL_MAP = {
 # ---------------------------------------------------------------------------
 # Step 1 — Download raw CSVs
 # ---------------------------------------------------------------------------
+
 
 def _download_file(url: str, dest: Path) -> None:
     """Download a file from url to dest, skipping if already present."""
@@ -104,12 +106,13 @@ def _download_file(url: str, dest: Path) -> None:
 def download_raw_data() -> None:
     """Download both train and test splits from UCI."""
     _download_file(TRAIN_URL, RAW_TRAIN_CSV)
-    _download_file(TEST_URL,  RAW_TEST_CSV)
+    _download_file(TEST_URL, RAW_TEST_CSV)
 
 
 # ---------------------------------------------------------------------------
 # Step 2 — Load and clean raw CSV
 # ---------------------------------------------------------------------------
+
 
 def _load_raw_csv(path: Path, skip_rows: int = 0) -> pd.DataFrame:
     """
@@ -122,8 +125,8 @@ def _load_raw_csv(path: Path, skip_rows: int = 0) -> pd.DataFrame:
         path,
         names=COLUMN_NAMES,
         skiprows=skip_rows,
-        skipinitialspace=True,   # UCI values have leading spaces e.g. " Private"
-        na_values="?",           # UCI encodes missing values as "?"
+        skipinitialspace=True,  # UCI values have leading spaces e.g. " Private"
+        na_values="?",  # UCI encodes missing values as "?"
     )
     return df
 
@@ -150,8 +153,12 @@ def _clean(df: pd.DataFrame) -> pd.DataFrame:
     # 3. Drop rows with any missing categorical value
     before = len(df)
     df = df.dropna()
-    after  = len(df)
-    log.info("Dropped %d rows with missing values (%.1f%%)", before - after, 100 * (before - after) / before)
+    after = len(df)
+    log.info(
+        "Dropped %d rows with missing values (%.1f%%)",
+        before - after,
+        100 * (before - after) / before,
+    )
 
     # 4. Reset index
     df = df.reset_index(drop=True)
@@ -174,7 +181,7 @@ def load_and_clean(split: str = "train") -> pd.DataFrame:
     if split == "train":
         df = _load_raw_csv(RAW_TRAIN_CSV, skip_rows=0)
     elif split == "test":
-        df = _load_raw_csv(RAW_TEST_CSV, skip_rows=1)   # skip the comment line
+        df = _load_raw_csv(RAW_TEST_CSV, skip_rows=1)  # skip the comment line
     else:
         raise ValueError(f"split must be 'train' or 'test', got '{split}'")
 
@@ -186,6 +193,7 @@ def load_and_clean(split: str = "train") -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Step 3 — Save to feature store as Parquet
 # ---------------------------------------------------------------------------
+
 
 def save_to_feature_store(df: pd.DataFrame, split: str) -> Path:
     """
@@ -207,6 +215,7 @@ def save_to_feature_store(df: pd.DataFrame, split: str) -> Path:
 # ---------------------------------------------------------------------------
 # Step 4 — Public loader (used by features.py and train.py)
 # ---------------------------------------------------------------------------
+
 
 def load_from_feature_store(split: str = "train") -> pd.DataFrame:
     """
@@ -237,6 +246,7 @@ def load_from_feature_store(split: str = "train") -> pd.DataFrame:
 # Step 5 — Basic sanity checks after loading
 # ---------------------------------------------------------------------------
 
+
 def validate_schema(df: pd.DataFrame) -> None:
     """
     Assert that the DataFrame has the expected columns and no missing values.
@@ -246,11 +256,14 @@ def validate_schema(df: pd.DataFrame) -> None:
     assert not missing_cols, f"Missing columns after ingestion: {missing_cols}"
 
     null_counts = df.isnull().sum()
-    assert null_counts.sum() == 0, f"Null values found after cleaning:\n{null_counts[null_counts > 0]}"
+    assert (
+        null_counts.sum() == 0
+    ), f"Null values found after cleaning:\n{null_counts[null_counts > 0]}"
 
-    assert set(df["income"].unique()) == {">50K", "<=50K"}, (
-        f"Unexpected income labels: {df['income'].unique()}"
-    )
+    assert set(df["income"].unique()) == {
+        ">50K",
+        "<=50K",
+    }, f"Unexpected income labels: {df['income'].unique()}"
 
     log.info("Schema validation passed ✓")
 
@@ -258,6 +271,7 @@ def validate_schema(df: pd.DataFrame) -> None:
 # ---------------------------------------------------------------------------
 # Entrypoint — run as script to download + prepare data
 # ---------------------------------------------------------------------------
+
 
 def run_ingestion_pipeline() -> None:
     """Full pipeline: download → clean → validate → save to feature store."""
@@ -281,7 +295,8 @@ def run_ingestion_pipeline() -> None:
     log.info("=" * 60)
     log.info(
         "Ingestion complete. Train: %d rows | Test: %d rows",
-        len(train_df), len(test_df),
+        len(train_df),
+        len(test_df),
     )
     log.info("Feature store location: %s", FEATURE_STORE.resolve())
     log.info("=" * 60)

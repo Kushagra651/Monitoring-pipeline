@@ -43,14 +43,14 @@ log = logging.getLogger(__name__)
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-SCHEDULE               = os.getenv("RETRAIN_TRIGGER_SCHEDULE", "30 */6 * * *")
-ARTIFACTS_DIR          = os.getenv("ARTIFACTS_DIR", "artifacts")
-DRIFT_DAG_ID           = "ml_drift_check"
-TRAINING_DAG_ID        = "ml_training_pipeline"
-COOLDOWN_HOURS         = int(os.getenv("RETRAIN_COOLDOWN_HOURS", "12"))
-MAX_PER_DAY            = int(os.getenv("RETRAIN_MAX_PER_DAY", "2"))
-COOLDOWN_FILE          = Path(ARTIFACTS_DIR) / "retrain_cooldown.json"
-FORCE_RETRAIN_VAR      = "FORCE_RETRAIN"   # Airflow Variable name
+SCHEDULE = os.getenv("RETRAIN_TRIGGER_SCHEDULE", "30 */6 * * *")
+ARTIFACTS_DIR = os.getenv("ARTIFACTS_DIR", "artifacts")
+DRIFT_DAG_ID = "ml_drift_check"
+TRAINING_DAG_ID = "ml_training_pipeline"
+COOLDOWN_HOURS = int(os.getenv("RETRAIN_COOLDOWN_HOURS", "12"))
+MAX_PER_DAY = int(os.getenv("RETRAIN_MAX_PER_DAY", "2"))
+COOLDOWN_FILE = Path(ARTIFACTS_DIR) / "retrain_cooldown.json"
+FORCE_RETRAIN_VAR = "FORCE_RETRAIN"  # Airflow Variable name
 
 DEFAULT_ARGS = {
     "owner": "ml-team",
@@ -63,6 +63,7 @@ DEFAULT_ARGS = {
 
 
 # ── Cooldown state helpers ────────────────────────────────────────────────────
+
 
 def _read_cooldown() -> dict:
     if COOLDOWN_FILE.exists():
@@ -87,7 +88,9 @@ def _count_today_retrains() -> int:
         runs = DagRun.find(
             dag_id=TRAINING_DAG_ID,
             state=DagRunState.SUCCESS,
-            execution_start_date=datetime.combine(today, datetime.min.time()).replace(tzinfo=timezone.utc),
+            execution_start_date=datetime.combine(today, datetime.min.time()).replace(
+                tzinfo=timezone.utc
+            ),
         )
         return len(runs) if runs else 0
     except Exception as e:
@@ -100,6 +103,7 @@ def _count_today_retrains() -> int:
 
 
 # ── Task callables ────────────────────────────────────────────────────────────
+
 
 def _poll_retrain_signal(**ctx) -> dict:
     """
@@ -116,8 +120,11 @@ def _poll_retrain_signal(**ctx) -> dict:
     except Exception:
         pass
 
-    signal = {"should_retrain": force, "severity": "forced" if force else "ok",
-              "source": "manual_override" if force else "drift_check"}
+    signal = {
+        "should_retrain": force,
+        "severity": "forced" if force else "ok",
+        "source": "manual_override" if force else "drift_check",
+    }
 
     if not force:
         # Fetch latest drift_check DAG run XCom
@@ -126,18 +133,22 @@ def _poll_retrain_signal(**ctx) -> dict:
             if latest_runs:
                 latest_run = max(latest_runs, key=lambda r: r.execution_date)
                 from airflow.models import TaskInstance
+
                 tis = TaskInstance.find(
                     dag_id=DRIFT_DAG_ID,
                     run_id=latest_run.run_id,
                     task_id="evaluate_severity",
                 )
                 if tis:
-                    severity_result = tis[0].xcom_pull(
-                        task_ids="evaluate_severity",
-                        key="severity_result",
-                        dag_id=DRIFT_DAG_ID,
-                        include_prior_dates=False,
-                    ) or {}
+                    severity_result = (
+                        tis[0].xcom_pull(
+                            task_ids="evaluate_severity",
+                            key="severity_result",
+                            dag_id=DRIFT_DAG_ID,
+                            include_prior_dates=False,
+                        )
+                        or {}
+                    )
                     signal = {
                         "should_retrain": severity_result.get("should_retrain", False),
                         "severity": severity_result.get("severity", "ok"),
@@ -149,8 +160,12 @@ def _poll_retrain_signal(**ctx) -> dict:
             log.error("XCom poll failed: %s — defaulting to no retrain.", e)
 
     ctx["ti"].xcom_push(key="retrain_signal", value=signal)
-    log.info("Retrain signal: should_retrain=%s severity=%s source=%s",
-             signal["should_retrain"], signal["severity"], signal["source"])
+    log.info(
+        "Retrain signal: should_retrain=%s severity=%s source=%s",
+        signal["should_retrain"],
+        signal["severity"],
+        signal["source"],
+    )
     return signal
 
 
@@ -164,11 +179,13 @@ def _check_cooldown(**ctx) -> dict:
     signal = ctx["ti"].xcom_pull(key="retrain_signal") or {}
 
     if not signal.get("should_retrain"):
-        ctx["ti"].xcom_push(key="cooldown_result", value={"approved": False, "reason": "no_signal"})
+        ctx["ti"].xcom_push(
+            key="cooldown_result", value={"approved": False, "reason": "no_signal"}
+        )
         return {"approved": False, "reason": "no_signal"}
 
     state = _read_cooldown()
-    now   = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
 
     # Cooldown check
     if state.get("last_retrain_utc"):
@@ -177,7 +194,9 @@ def _check_cooldown(**ctx) -> dict:
         if elapsed_h < COOLDOWN_HOURS:
             reason = f"cooldown ({elapsed_h:.1f}h < {COOLDOWN_HOURS}h required)"
             log.info("Retrain suppressed: %s", reason)
-            ctx["ti"].xcom_push(key="cooldown_result", value={"approved": False, "reason": reason})
+            ctx["ti"].xcom_push(
+                key="cooldown_result", value={"approved": False, "reason": reason}
+            )
             return {"approved": False, "reason": reason}
 
     # Daily cap check
@@ -185,10 +204,14 @@ def _check_cooldown(**ctx) -> dict:
     if today_count >= MAX_PER_DAY:
         reason = f"daily_cap ({today_count}/{MAX_PER_DAY} runs today)"
         log.info("Retrain suppressed: %s", reason)
-        ctx["ti"].xcom_push(key="cooldown_result", value={"approved": False, "reason": reason})
+        ctx["ti"].xcom_push(
+            key="cooldown_result", value={"approved": False, "reason": reason}
+        )
         return {"approved": False, "reason": reason}
 
-    ctx["ti"].xcom_push(key="cooldown_result", value={"approved": True, "reason": "cleared"})
+    ctx["ti"].xcom_push(
+        key="cooldown_result", value={"approved": True, "reason": "cleared"}
+    )
     log.info("Retrain approved. Today's count: %d/%d", today_count, MAX_PER_DAY)
     return {"approved": True, "reason": "cleared"}
 
@@ -201,8 +224,9 @@ def _branch_retrain(**ctx) -> str:
 def _notify_retrain_triggered(**ctx) -> None:
     """Alert team that an automated retrain was kicked off."""
     from alerting.notify import send_alert
-    signal   = ctx["ti"].xcom_pull(key="retrain_signal")   or {}
-    cooldown = ctx["ti"].xcom_pull(key="cooldown_result")  or {}
+
+    signal = ctx["ti"].xcom_pull(key="retrain_signal") or {}
+    cooldown = ctx["ti"].xcom_pull(key="cooldown_result") or {}
 
     send_alert(
         level="warning",
@@ -224,7 +248,7 @@ def _notify_retrain_triggered(**ctx) -> None:
 
 def _update_cooldown(**ctx) -> None:
     """Write updated cooldown state after successful trigger."""
-    now   = datetime.now(timezone.utc)
+    now = datetime.now(timezone.utc)
     today = str(now.date())
     state = _read_cooldown()
 
@@ -234,17 +258,20 @@ def _update_cooldown(**ctx) -> None:
         state["today_date"] = today
 
     state["last_retrain_utc"] = now.isoformat()
-    state["runs_today"]       = state.get("runs_today", 0) + 1
+    state["runs_today"] = state.get("runs_today", 0) + 1
     _write_cooldown(state)
-    log.info("Cooldown updated: last=%s runs_today=%d", now.isoformat(), state["runs_today"])
+    log.info(
+        "Cooldown updated: last=%s runs_today=%d", now.isoformat(), state["runs_today"]
+    )
 
 
 def _log_skip(**ctx) -> None:
     cooldown = ctx["ti"].xcom_pull(key="cooldown_result") or {}
-    signal   = ctx["ti"].xcom_pull(key="retrain_signal")  or {}
+    signal = ctx["ti"].xcom_pull(key="retrain_signal") or {}
     log.info(
         "Retrain skipped. should_retrain=%s reason=%s",
-        signal.get("should_retrain"), cooldown.get("reason"),
+        signal.get("should_retrain"),
+        cooldown.get("reason"),
     )
 
 
@@ -259,7 +286,8 @@ def _clear_force_retrain_var(**ctx) -> None:
 def _notify_failure(context) -> None:
     try:
         from alerting.notify import send_alert
-        dag_id  = context["dag"].dag_id
+
+        dag_id = context["dag"].dag_id
         task_id = context["task_instance"].task_id
         send_alert(
             level="critical",
@@ -324,7 +352,7 @@ and triggers `{TRAINING_DAG_ID}` if retraining is warranted.
     trigger_training = TriggerDagRunOperator(
         task_id="trigger_training",
         trigger_dag_id=TRAINING_DAG_ID,
-        wait_for_completion=False,        # fire-and-forget; training DAG is long-running
+        wait_for_completion=False,  # fire-and-forget; training DAG is long-running
         reset_dag_run=False,
         conf={
             "triggered_by": "ml_retrain_trigger",
@@ -358,7 +386,7 @@ and triggers `{TRAINING_DAG_ID}` if retraining is warranted.
     )
 
     # Pipeline
-    poll_signal   >> check_cooldown >> branch
-    branch        >> [trigger_training, skip_retrain]
+    poll_signal >> check_cooldown >> branch
+    branch >> [trigger_training, skip_retrain]
     trigger_training >> notify_triggered >> update_cooldown >> clear_force_var >> done
-    skip_retrain  >> done
+    skip_retrain >> done

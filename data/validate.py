@@ -119,7 +119,7 @@
 # #         # f.name: f.dtype for f in FEATURE_SCHEMA  # type: ignore[attr-defined]
 # #         expected_columns = set(PredictionInput.model_fields.keys())
 # #     }
-  
+
 
 #     missing = [col for col in required_columns if col not in df.columns]
 #     if missing:
@@ -300,6 +300,7 @@ PRIMARY_KEY: list[str] = ["transaction_id"]
 # Report dataclass
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class ValidationError:
     column: str
@@ -335,6 +336,7 @@ class ValidationReport:
 # Checks
 # ---------------------------------------------------------------------------
 
+
 def _check_row_count(df: pd.DataFrame, report: ValidationReport) -> None:
     report.row_count = len(df)
     if len(df) < MIN_BATCH_ROWS:
@@ -360,9 +362,7 @@ def _check_schema(df: pd.DataFrame, report: ValidationReport) -> None:
 
     extra = actual_columns - expected_columns
     if extra:
-        report.add_warning(
-            f"Extra columns present (not part of schema): {extra}"
-        )
+        report.add_warning(f"Extra columns present (not part of schema): {extra}")
 
 
 def _check_duplicates(df: pd.DataFrame, report: ValidationReport) -> None:
@@ -371,16 +371,17 @@ def _check_duplicates(df: pd.DataFrame, report: ValidationReport) -> None:
         return
     dup_count = int(df.duplicated(subset=pk_cols).sum())
     if dup_count > 0:
-        report.add_warning(
-            f"Found {dup_count} duplicate rows on key {pk_cols}."
-        )
+        report.add_warning(f"Found {dup_count} duplicate rows on key {pk_cols}.")
 
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
-def validate_dataframe(df: pd.DataFrame, *, raise_on_failure: bool = False) -> ValidationReport:
+
+def validate_dataframe(
+    df: pd.DataFrame, *, raise_on_failure: bool = False
+) -> ValidationReport:
     report = ValidationReport()
 
     _check_row_count(df, report)

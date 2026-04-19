@@ -37,6 +37,7 @@
 import os
 import json
 import logging
+
 # import shutil
 # import time
 from datetime import datetime
@@ -61,18 +62,18 @@ MODEL_DIR = Path(os.getenv("MODEL_DIR", "artifacts/models"))
 
 # The registry file is the central database of all model versions.
 # It's a JSON file — simple, human-readable, and diff-able in git.
-REGISTRY_FILE        = MODEL_DIR / "model_registry.json"
+REGISTRY_FILE = MODEL_DIR / "model_registry.json"
 
 # predict.py reads PRODUCTION_FILE on startup to know which model to load.
 # It's a tiny JSON with just the version_tag + paths — fast to read.
-PRODUCTION_FILE      = MODEL_DIR / "production_model.json"
+PRODUCTION_FILE = MODEL_DIR / "production_model.json"
 
 # Append-only audit log — every promotion and rollback is recorded here.
-AUDIT_LOG_FILE       = MODEL_DIR / "promotion_audit.log"
+AUDIT_LOG_FILE = MODEL_DIR / "promotion_audit.log"
 
 # Symlinks — predict.py uses these so it never needs to know the version_tag.
 # When we promote a new model we just update the symlinks; no code changes.
-LATEST_MODEL_SYMLINK    = MODEL_DIR / "latest_model.pkl"
+LATEST_MODEL_SYMLINK = MODEL_DIR / "latest_model.pkl"
 LATEST_PIPELINE_SYMLINK = MODEL_DIR / "latest_pipeline.pkl"
 
 # Minimum improvement a new model must show over current production.
@@ -83,6 +84,7 @@ MIN_IMPROVEMENT_DELTA = float(os.getenv("MIN_IMPROVEMENT_DELTA", "0.001"))  # 0.
 # =============================================================================
 # REGISTRY HELPERS
 # =============================================================================
+
 
 def _ensure_dirs() -> None:
     """Creates MODEL_DIR and any parent directories if they don't exist."""
@@ -189,8 +191,10 @@ def _load_production_model_info() -> Optional[dict]:
 # COMPARISON LOGIC
 # =============================================================================
 
-def _is_better_than_production(new_metrics: dict,
-                                 prod_metrics: Optional[dict]) -> tuple[bool, str]:
+
+def _is_better_than_production(
+    new_metrics: dict, prod_metrics: Optional[dict]
+) -> tuple[bool, str]:
     """
     Decides if the new model is good enough to replace the current production model.
 
@@ -217,20 +221,24 @@ def _is_better_than_production(new_metrics: dict,
     if prod_metrics is None:
         return True, "No existing production model — first deployment"
 
-    new_auc  = new_metrics.get("roc_auc", 0.0)
+    new_auc = new_metrics.get("roc_auc", 0.0)
     prod_auc = prod_metrics.get("roc_auc", 0.0)
-    delta    = new_auc - prod_auc
+    delta = new_auc - prod_auc
 
-    new_f1   = new_metrics.get("f1", 0.0)
-    prod_f1  = prod_metrics.get("f1", 0.0)
+    new_f1 = new_metrics.get("f1", 0.0)
+    prod_f1 = prod_metrics.get("f1", 0.0)
 
     logger.info(
         "Comparison — new ROC-AUC: %.4f  |  prod ROC-AUC: %.4f  |  delta: %+.4f  (min: %+.4f)",
-        new_auc, prod_auc, delta, MIN_IMPROVEMENT_DELTA,
+        new_auc,
+        prod_auc,
+        delta,
+        MIN_IMPROVEMENT_DELTA,
     )
     logger.info(
         "Comparison — new F1: %.4f  |  prod F1: %.4f",
-        new_f1, prod_f1,
+        new_f1,
+        prod_f1,
     )
 
     # Rule 3: Must beat production by at least MIN_IMPROVEMENT_DELTA
@@ -256,6 +264,7 @@ def _is_better_than_production(new_metrics: dict,
 # SYMLINK MANAGEMENT
 # =============================================================================
 
+
 def _update_symlinks(version_tag: str) -> None:
     """
     Updates the latest_model.pkl and latest_pipeline.pkl symlinks to point
@@ -270,11 +279,11 @@ def _update_symlinks(version_tag: str) -> None:
     Note: On Windows, symlinks require elevated permissions.
     In Docker (Linux) this works seamlessly.
     """
-    model_path    = MODEL_DIR / f"model_v{version_tag}.pkl"
+    model_path = MODEL_DIR / f"model_v{version_tag}.pkl"
     pipeline_path = MODEL_DIR / f"pipeline_v{version_tag}.pkl"
 
     for symlink, target in [
-        (LATEST_MODEL_SYMLINK,    model_path),
+        (LATEST_MODEL_SYMLINK, model_path),
         (LATEST_PIPELINE_SYMLINK, pipeline_path),
     ]:
         # Remove old symlink if it exists
@@ -282,7 +291,7 @@ def _update_symlinks(version_tag: str) -> None:
             symlink.unlink()
 
         # Create new symlink pointing to versioned artifact
-        symlink.symlink_to(target.name)   # relative symlink — portable across mounts
+        symlink.symlink_to(target.name)  # relative symlink — portable across mounts
         logger.info("Symlink updated: %s → %s", symlink.name, target.name)
 
 
@@ -290,8 +299,10 @@ def _update_symlinks(version_tag: str) -> None:
 # AUDIT LOGGING
 # =============================================================================
 
-def _write_audit_entry(action: str, version_tag: str, reason: str,
-                        metrics: Optional[dict] = None) -> None:
+
+def _write_audit_entry(
+    action: str, version_tag: str, reason: str, metrics: Optional[dict] = None
+) -> None:
     """
     Appends a human-readable line to the audit log.
 
@@ -313,8 +324,7 @@ def _write_audit_entry(action: str, version_tag: str, reason: str,
         )
 
     entry = (
-        f"{timestamp} | {action:<12} | v{version_tag} | "
-        f"{metrics_str} | {reason}\n"
+        f"{timestamp} | {action:<12} | v{version_tag} | " f"{metrics_str} | {reason}\n"
     )
 
     with open(AUDIT_LOG_FILE, "a") as f:
@@ -326,6 +336,7 @@ def _write_audit_entry(action: str, version_tag: str, reason: str,
 # =============================================================================
 # ARCHIVE PREVIOUS PRODUCTION
 # =============================================================================
+
 
 def _archive_current_production(registry: dict) -> None:
     """
@@ -350,8 +361,8 @@ def _archive_current_production(registry: dict) -> None:
 # CORE REGISTRATION FUNCTION
 # =============================================================================
 
-def register_model(version_tag: str,
-                   force: bool = False) -> dict:
+
+def register_model(version_tag: str, force: bool = False) -> dict:
     """
     Attempts to promote a trained + evaluated model to production.
 
@@ -375,8 +386,9 @@ def register_model(version_tag: str,
     _ensure_dirs()
 
     logger.info("=" * 60)
-    logger.info("Model registration started  |  version: %s  |  force=%s",
-                version_tag, force)
+    logger.info(
+        "Model registration started  |  version: %s  |  force=%s", version_tag, force
+    )
     logger.info("=" * 60)
 
     # -------------------------------------------------------------------------
@@ -406,8 +418,12 @@ def register_model(version_tag: str,
         logger.warning("❌  Registration REJECTED: %s", reason)
         _write_audit_entry("REJECTED", version_tag, reason, new_metrics)
         _record_in_registry(version_tag, "failed", eval_report, reason)
-        return {"promoted": False, "version_tag": version_tag,
-                "reason": reason, "metrics": new_metrics}
+        return {
+            "promoted": False,
+            "version_tag": version_tag,
+            "reason": reason,
+            "metrics": new_metrics,
+        }
 
     if force and not eval_promote:
         logger.warning(
@@ -420,8 +436,8 @@ def register_model(version_tag: str,
     # -------------------------------------------------------------------------
     logger.info("Step 3/5 — Comparing against current production model …")
 
-    registry    = _load_registry()
-    prod_info   = _load_production_model_info()
+    registry = _load_registry()
+    prod_info = _load_production_model_info()
     prod_metrics = prod_info.get("metrics") if prod_info else None
 
     if force:
@@ -441,8 +457,12 @@ def register_model(version_tag: str,
         _write_audit_entry("NOT_PROMOTED", version_tag, reason, new_metrics)
         _record_in_registry(version_tag, "not_promoted", eval_report, reason, registry)
         _save_registry(registry)
-        return {"promoted": False, "version_tag": version_tag,
-                "reason": reason, "metrics": new_metrics}
+        return {
+            "promoted": False,
+            "version_tag": version_tag,
+            "reason": reason,
+            "metrics": new_metrics,
+        }
 
     # --- Proceed with promotion ---
     logger.info("✅  Promoting model v%s to production …", version_tag)
@@ -455,7 +475,7 @@ def register_model(version_tag: str,
 
     # Update the pointer to which version is production
     registry["production_version"] = version_tag
-    registry["last_promoted_at"]   = datetime.utcnow().isoformat()
+    registry["last_promoted_at"] = datetime.utcnow().isoformat()
 
     # -------------------------------------------------------------------------
     # STEP 5 — Persist everything
@@ -464,13 +484,13 @@ def register_model(version_tag: str,
 
     # Write production_model.json — predict.py reads this on startup
     production_info = {
-        "version_tag":   version_tag,
-        "promoted_at":   datetime.utcnow().isoformat(),
-        "model_path":    str(MODEL_DIR / f"model_v{version_tag}.pkl"),
+        "version_tag": version_tag,
+        "promoted_at": datetime.utcnow().isoformat(),
+        "model_path": str(MODEL_DIR / f"model_v{version_tag}.pkl"),
         "pipeline_path": str(MODEL_DIR / f"pipeline_v{version_tag}.pkl"),
-        "metrics":       new_metrics,
-        "reason":        reason,
-        "forced":        force,
+        "metrics": new_metrics,
+        "reason": reason,
+        "forced": force,
     }
     with open(PRODUCTION_FILE, "w") as f:
         json.dump(production_info, f, indent=2, default=str)
@@ -483,28 +503,29 @@ def register_model(version_tag: str,
     _update_symlinks(version_tag)
 
     # Write to the permanent audit trail
-    _write_audit_entry(
-        "PROMOTED", version_tag, reason, new_metrics
-    )
+    _write_audit_entry("PROMOTED", version_tag, reason, new_metrics)
 
     logger.info("=" * 60)
     logger.info(
         "✅  Model v%s is now PRODUCTION  |  roc_auc=%.4f  f1=%.4f",
-        version_tag, new_metrics["roc_auc"], new_metrics["f1"],
+        version_tag,
+        new_metrics["roc_auc"],
+        new_metrics["f1"],
     )
     logger.info("=" * 60)
 
     return {
-        "promoted":    True,
+        "promoted": True,
         "version_tag": version_tag,
-        "reason":      reason,
-        "metrics":     new_metrics,
+        "reason": reason,
+        "metrics": new_metrics,
     }
 
 
 # =============================================================================
 # ROLLBACK FUNCTION
 # =============================================================================
+
 
 def rollback(target_version_tag: str) -> dict:
     """
@@ -542,7 +563,7 @@ def rollback(target_version_tag: str) -> dict:
     target_entry = registry["models"][target_version_tag]
 
     # Check the model artifacts still exist on disk
-    model_path    = MODEL_DIR / f"model_v{target_version_tag}.pkl"
+    model_path = MODEL_DIR / f"model_v{target_version_tag}.pkl"
     pipeline_path = MODEL_DIR / f"pipeline_v{target_version_tag}.pkl"
 
     if not model_path.exists() or not pipeline_path.exists():
@@ -555,22 +576,24 @@ def rollback(target_version_tag: str) -> dict:
     _archive_current_production(registry)
 
     # Restore target version as production
-    registry["models"][target_version_tag]["status"]      = "production"
-    registry["models"][target_version_tag]["restored_at"] = datetime.utcnow().isoformat()
+    registry["models"][target_version_tag]["status"] = "production"
+    registry["models"][target_version_tag][
+        "restored_at"
+    ] = datetime.utcnow().isoformat()
     registry["production_version"] = target_version_tag
-    registry["last_promoted_at"]   = datetime.utcnow().isoformat()
+    registry["last_promoted_at"] = datetime.utcnow().isoformat()
 
     # Update production_model.json
     target_metrics = target_entry.get("metrics", {})
     production_info = {
-        "version_tag":   target_version_tag,
-        "promoted_at":   datetime.utcnow().isoformat(),
-        "model_path":    str(model_path),
+        "version_tag": target_version_tag,
+        "promoted_at": datetime.utcnow().isoformat(),
+        "model_path": str(model_path),
         "pipeline_path": str(pipeline_path),
-        "metrics":       target_metrics,
-        "reason":        "Rollback from CLI/Airflow",
-        "forced":        True,
-        "is_rollback":   True,
+        "metrics": target_metrics,
+        "reason": "Rollback from CLI/Airflow",
+        "forced": True,
+        "is_rollback": True,
     }
     with open(PRODUCTION_FILE, "w") as f:
         json.dump(production_info, f, indent=2, default=str)
@@ -586,10 +609,10 @@ def rollback(target_version_tag: str) -> dict:
     logger.info("=" * 60)
 
     return {
-        "promoted":    True,
+        "promoted": True,
         "version_tag": target_version_tag,
-        "reason":      reason,
-        "metrics":     target_metrics,
+        "reason": reason,
+        "metrics": target_metrics,
         "is_rollback": True,
     }
 
@@ -598,9 +621,14 @@ def rollback(target_version_tag: str) -> dict:
 # REGISTRY RECORD HELPER
 # =============================================================================
 
-def _record_in_registry(version_tag: str, status: str,
-                         eval_report: dict, reason: str,
-                         registry: Optional[dict] = None) -> None:
+
+def _record_in_registry(
+    version_tag: str,
+    status: str,
+    eval_report: dict,
+    reason: str,
+    registry: Optional[dict] = None,
+) -> None:
     """
     Adds or updates a model's entry in the registry dict.
 
@@ -618,16 +646,16 @@ def _record_in_registry(version_tag: str, status: str,
         registry = _load_registry()
 
     registry["models"][version_tag] = {
-        "version_tag":    version_tag,
-        "status":         status,
-        "recorded_at":    datetime.utcnow().isoformat(),
-        "reason":         reason,
-        "metrics":        eval_report.get("metrics", {}),
-        "promote_flag":   eval_report.get("promote"),
+        "version_tag": version_tag,
+        "status": status,
+        "recorded_at": datetime.utcnow().isoformat(),
+        "reason": reason,
+        "metrics": eval_report.get("metrics", {}),
+        "promote_flag": eval_report.get("promote"),
         "promotion_gate": eval_report.get("promotion_gate", {}),
         "training_context": eval_report.get("training_context", {}),
-        "model_path":     str(MODEL_DIR / f"model_v{version_tag}.pkl"),
-        "pipeline_path":  str(MODEL_DIR / f"pipeline_v{version_tag}.pkl"),
+        "model_path": str(MODEL_DIR / f"model_v{version_tag}.pkl"),
+        "pipeline_path": str(MODEL_DIR / f"pipeline_v{version_tag}.pkl"),
         "eval_report_path": str(MODEL_DIR / f"eval_report_v{version_tag}.json"),
     }
 
@@ -635,6 +663,7 @@ def _record_in_registry(version_tag: str, status: str,
 # =============================================================================
 # LIST MODELS HELPER
 # =============================================================================
+
 
 def list_models(status_filter: Optional[str] = None) -> list:
     """
@@ -652,7 +681,7 @@ def list_models(status_filter: Optional[str] = None) -> list:
         List of model entry dicts, sorted newest first
     """
     registry = _load_registry()
-    models   = list(registry.get("models", {}).values())
+    models = list(registry.get("models", {}).values())
 
     if status_filter:
         models = [m for m in models if m.get("status") == status_filter]
@@ -686,24 +715,33 @@ def list_models(status_filter: Optional[str] = None) -> list:
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Register or rollback ML model versions.")
+    parser = argparse.ArgumentParser(
+        description="Register or rollback ML model versions."
+    )
     parser.add_argument(
-        "--action", type=str, default="promote",
+        "--action",
+        type=str,
+        default="promote",
         choices=["promote", "rollback", "list"],
-        help="Action to perform (default: promote)"
+        help="Action to perform (default: promote)",
     )
     parser.add_argument(
-        "--version_tag", type=str, default=None,
-        help="Model version tag, e.g. 20240415_143022"
+        "--version_tag",
+        type=str,
+        default=None,
+        help="Model version tag, e.g. 20240415_143022",
     )
     parser.add_argument(
-        "--force", action="store_true",
-        help="Force promote even if comparison check fails"
+        "--force",
+        action="store_true",
+        help="Force promote even if comparison check fails",
     )
     parser.add_argument(
-        "--status", type=str, default=None,
+        "--status",
+        type=str,
+        default=None,
         choices=["production", "archived", "failed", "not_promoted"],
-        help="Filter for --action list"
+        help="Filter for --action list",
     )
     args = parser.parse_args()
 
@@ -716,8 +754,10 @@ if __name__ == "__main__":
         print(f"  Reason   : {result['reason']}")
         if result.get("metrics"):
             m = result["metrics"]
-            print(f"  Metrics  : acc={m.get('accuracy','n/a'):.4f}  "
-                  f"f1={m.get('f1','n/a'):.4f}  roc_auc={m.get('roc_auc','n/a'):.4f}")
+            print(
+                f"  Metrics  : acc={m.get('accuracy','n/a'):.4f}  "
+                f"f1={m.get('f1','n/a'):.4f}  roc_auc={m.get('roc_auc','n/a'):.4f}"
+            )
 
     elif args.action == "rollback":
         if not args.version_tag:
@@ -727,7 +767,9 @@ if __name__ == "__main__":
 
     elif args.action == "list":
         models = list_models(status_filter=args.status)
-        print(f"\n{'VERSION TAG':<22} {'STATUS':<15} {'ROC-AUC':<10} {'F1':<10} RECORDED AT")
+        print(
+            f"\n{'VERSION TAG':<22} {'STATUS':<15} {'ROC-AUC':<10} {'F1':<10} RECORDED AT"
+        )
         print("-" * 80)
         for m in models:
             metrics = m.get("metrics", {})

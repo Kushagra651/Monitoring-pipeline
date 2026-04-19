@@ -30,6 +30,7 @@ from pathlib import Path
 from typing import Optional
 
 import numpy as np
+
 # import pandas as pd
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.model_selection import train_test_split
@@ -41,6 +42,7 @@ from sklearn.model_selection import train_test_split
 from data.ingest import run_ingestion_pipeline
 from data.validate import validate_dataframe
 from data.features import build_features, FeaturePipeline
+
 # from api.schemas import FEATURE_SCHEMA  # column contract / target name
 # from api.schemas import PredictionInput, PredictionOutput  # for type hints and contract validation
 
@@ -80,17 +82,18 @@ RANDOM_SEED = int(os.getenv("RANDOM_SEED", "42"))
 # Hyperparameters for GradientBoostingClassifier — read from env so we can
 # tune them from the Airflow DAG or CI without touching this file
 DEFAULT_PARAMS = {
-    "n_estimators":   int(os.getenv("GBM_N_ESTIMATORS", "200")),
-    "max_depth":      int(os.getenv("GBM_MAX_DEPTH", "4")),
-    "learning_rate":  float(os.getenv("GBM_LEARNING_RATE", "0.05")),
-    "subsample":      float(os.getenv("GBM_SUBSAMPLE", "0.8")),
-    "random_state":   RANDOM_SEED,
+    "n_estimators": int(os.getenv("GBM_N_ESTIMATORS", "200")),
+    "max_depth": int(os.getenv("GBM_MAX_DEPTH", "4")),
+    "learning_rate": float(os.getenv("GBM_LEARNING_RATE", "0.05")),
+    "subsample": float(os.getenv("GBM_SUBSAMPLE", "0.8")),
+    "random_state": RANDOM_SEED,
 }
 
 
 # =============================================================================
 # ARTIFACT HELPERS
 # =============================================================================
+
 
 def _make_version_tag() -> str:
     """
@@ -146,7 +149,7 @@ def save_pipeline(pipeline: FeaturePipeline, version_tag: str) -> Path:
         Path to the saved pipeline .pkl file
     """
     path = MODEL_DIR / f"pipeline_v{version_tag}.pkl"
-    pipeline.save(str(path))          # FeaturePipeline.save() uses joblib internally
+    pipeline.save(str(path))  # FeaturePipeline.save() uses joblib internally
     logger.info("Feature pipeline saved → %s", path)
     return path
 
@@ -172,7 +175,9 @@ def save_metadata(meta: dict, version_tag: str) -> Path:
     """
     path = MODEL_DIR / f"train_meta_v{version_tag}.json"
     with open(path, "w") as f:
-        json.dump(meta, f, indent=2, default=str)   # default=str handles datetime objects
+        json.dump(
+            meta, f, indent=2, default=str
+        )  # default=str handles datetime objects
     logger.info("Training metadata saved → %s", path)
     return path
 
@@ -180,6 +185,7 @@ def save_metadata(meta: dict, version_tag: str) -> Path:
 # =============================================================================
 # CORE TRAINING LOGIC
 # =============================================================================
+
 
 def train(
     model_params: Optional[dict] = None,
@@ -228,22 +234,27 @@ def train(
     logger.info("Step 1/7 — Ingesting data …")
     t0 = time.perf_counter()
 
-    raw_df = run_ingestion_pipeline()# source=None → uses env config
-    # fixed the error
+    run_ingestion_pipeline(...)
+
     import pandas as pd
+
+    # source=None → uses env config
+    # fixed the error
 
     train_path = "data/feature_store/train.parquet"
     raw_df = pd.read_parquet(train_path)
 
     logger.info(
-    "Loaded training data: %d rows × %d cols",
-    len(raw_df),
-    raw_df.shape[1],
+        "Loaded training data: %d rows × %d cols",
+        len(raw_df),
+        raw_df.shape[1],
     )
 
     logger.info(
         "Ingested %d rows × %d cols in %.2fs",
-        len(raw_df), raw_df.shape[1], time.perf_counter() - t0,
+        len(raw_df),
+        raw_df.shape[1],
+        time.perf_counter() - t0,
     )
 
     # -------------------------------------------------------------------------
@@ -284,8 +295,7 @@ def train(
 
     X, y, pipeline = build_features(raw_df, fit=True)
 
-     # build_features() returns the fitted pipeline as well
-   
+    # build_features() returns the fitted pipeline as well
 
     logger.info(
         "Feature matrix shape: %s  |  target distribution: %s",
@@ -302,15 +312,14 @@ def train(
     logger.info("Step 4/7 — Splitting data (val=%.0f%%) …", VALIDATION_SPLIT * 100)
 
     X_train, X_val, y_train, y_val = train_test_split(
-        X, y,
+        X,
+        y,
         test_size=VALIDATION_SPLIT,
         random_state=RANDOM_SEED,
-        stratify=y,           # preserves class ratio in both splits
+        stratify=y,  # preserves class ratio in both splits
     )
 
-    logger.info(
-        "Split sizes — train: %d  |  val: %d", len(y_train), len(y_val)
-    )
+    logger.info("Split sizes — train: %d  |  val: %d", len(y_train), len(y_val))
 
     # -------------------------------------------------------------------------
     # STEP 5 — Model training
@@ -357,49 +366,49 @@ def train(
     # -------------------------------------------------------------------------
     logger.info("Step 7/7 — Saving artifacts …")
 
-    model_path    = save_model(model, version_tag)
+    model_path = save_model(model, version_tag)
     pipeline_path = save_pipeline(pipeline, version_tag)
 
     # Build metadata dict — everything register_model.py needs to make a
     # promotion decision (accuracy, data size, params, timing)
     meta = {
-        "version_tag":      version_tag,
-        "trained_at":       datetime.utcnow().isoformat(),
-        "n_rows_ingested":  len(raw_df),
+        "version_tag": version_tag,
+        "trained_at": datetime.utcnow().isoformat(),
+        "n_rows_ingested": len(raw_df),
         "n_rows_validated": report.row_count,
-        "n_train":          int(len(y_train)),
-        "n_val":            int(len(y_val)),
-        "n_features":       int(X.shape[1]),
-        "val_accuracy":     round(val_accuracy, 6),
+        "n_train": int(len(y_train)),
+        "n_val": int(len(y_val)),
+        "n_features": int(X.shape[1]),
+        "val_accuracy": round(val_accuracy, 6),
         "train_duration_s": round(train_duration, 3),
-        "hyperparameters":  params,
-        "model_path":       str(model_path),
-        "pipeline_path":    str(pipeline_path),
-        "target_column":    TARGET_COL,
-        "random_seed":      RANDOM_SEED,
-        "soft_check_warnings": [
-            {"message": warning}
-            for warning in report.warnings
-            ],
+        "hyperparameters": params,
+        "model_path": str(model_path),
+        "pipeline_path": str(pipeline_path),
+        "target_column": TARGET_COL,
+        "random_seed": RANDOM_SEED,
+        "soft_check_warnings": [{"message": warning} for warning in report.warnings],
     }
 
     meta_path = save_metadata(meta, version_tag)
 
     logger.info("=" * 60)
-    logger.info("Training run COMPLETE  |  version: %s  |  val_acc: %.4f",
-                version_tag, val_accuracy)
+    logger.info(
+        "Training run COMPLETE  |  version: %s  |  val_acc: %.4f",
+        version_tag,
+        val_accuracy,
+    )
     logger.info("=" * 60)
 
     # Return a result dict so the Airflow DAG or register_model.py can
     # use XCom / direct call to pick up paths and metrics
     return {
-        "version_tag":    version_tag,
-        "model_path":     str(model_path),
-        "pipeline_path":  str(pipeline_path),
-        "meta_path":      str(meta_path),
-        "val_accuracy":   val_accuracy,
-        "n_train":        int(len(y_train)),
-        "n_val":          int(len(y_val)),
+        "version_tag": version_tag,
+        "model_path": str(model_path),
+        "pipeline_path": str(pipeline_path),
+        "meta_path": str(meta_path),
+        "val_accuracy": val_accuracy,
+        "n_train": int(len(y_train)),
+        "n_val": int(len(y_val)),
     }
 
 
@@ -418,17 +427,27 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Train the ML model from scratch.")
-    parser.add_argument("--n_estimators", type=int,   default=None, help="Number of boosting rounds")
-    parser.add_argument("--max_depth",    type=int,   default=None, help="Max tree depth")
-    parser.add_argument("--learning_rate",type=float, default=None, help="Shrinkage factor")
-    parser.add_argument("--subsample",    type=float, default=None, help="Row subsampling fraction")
-    parser.add_argument("--data_source",  type=str,   default=None, help="Override ingest source path/table")
+    parser.add_argument(
+        "--n_estimators", type=int, default=None, help="Number of boosting rounds"
+    )
+    parser.add_argument("--max_depth", type=int, default=None, help="Max tree depth")
+    parser.add_argument(
+        "--learning_rate", type=float, default=None, help="Shrinkage factor"
+    )
+    parser.add_argument(
+        "--subsample", type=float, default=None, help="Row subsampling fraction"
+    )
+    parser.add_argument(
+        "--data_source",
+        type=str,
+        default=None,
+        help="Override ingest source path/table",
+    )
     args = parser.parse_args()
 
     # Build param overrides from CLI — only include args that were actually set
     overrides = {
-        k: v for k, v in vars(args).items()
-        if v is not None and k != "data_source"
+        k: v for k, v in vars(args).items() if v is not None and k != "data_source"
     }
 
     result = train(model_params=overrides or None, data_source=args.data_source)

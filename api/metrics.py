@@ -43,6 +43,7 @@ from typing import Any
 # ---------------------------------------------------------------------------
 try:
     from api.logger import PredictionLog  # type: ignore
+
     _LOG_TYPE_AVAILABLE = True
 except ImportError:
     PredictionLog = Any  # type: ignore[misc,assignment]
@@ -60,6 +61,7 @@ CONFIDENCE_BUCKETS: list[float] = [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 1.0, float("in
 # ---------------------------------------------------------------------------
 # Histogram helper
 # ---------------------------------------------------------------------------
+
 
 class _Histogram:
     """
@@ -128,12 +130,14 @@ class _Histogram:
 # MetricsSnapshot — immutable view returned to callers
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class MetricsSnapshot:
     """
     Point-in-time read of all metrics.
     Consumed by main.py (/metrics endpoint) and prometheus_exporter.py.
     """
+
     # Totals
     requests_total: int
     errors_total: int
@@ -151,11 +155,11 @@ class MetricsSnapshot:
     # Accuracy (only populated when ground truth is available)
     labeled_total: int
     correct_total: int
-    accuracy: float                    # labeled_total == 0 → 0.0
+    accuracy: float  # labeled_total == 0 → 0.0
 
     # Time window
-    window_start: float                # Unix timestamp of first recorded event
-    window_end: float                  # Unix timestamp of snapshot
+    window_start: float  # Unix timestamp of first recorded event
+    window_end: float  # Unix timestamp of snapshot
 
     # Derived rates (per second over the window)
     request_rate: float
@@ -184,6 +188,7 @@ class MetricsSnapshot:
 # ---------------------------------------------------------------------------
 # Registry — module-level singleton
 # ---------------------------------------------------------------------------
+
 
 class _MetricsRegistry:
     """Thread-safe, in-process metrics store."""
@@ -309,7 +314,8 @@ class _MetricsRegistry:
 
             accuracy = (
                 self._correct_total / self._labeled_total
-                if self._labeled_total > 0 else 0.0
+                if self._labeled_total > 0
+                else 0.0
             )
 
             return MetricsSnapshot(
@@ -405,6 +411,7 @@ def reset() -> None:
 # (used by prometheus_exporter.py as a lightweight fallback)
 # ---------------------------------------------------------------------------
 
+
 def to_prometheus_text(snapshot: MetricsSnapshot | None = None) -> str:
     """
     Render the current metrics snapshot in Prometheus text exposition format.
@@ -432,8 +439,9 @@ def to_prometheus_text(snapshot: MetricsSnapshot | None = None) -> str:
 
     # --- Per-version ---
     for version, count in s.requests_by_version.items():
-        _counter("ml_api_requests_by_version_total", count,
-                 f'model_version="{version}"')
+        _counter(
+            "ml_api_requests_by_version_total", count, f'model_version="{version}"'
+        )
 
     # --- Per-error-kind ---
     for kind, count in s.errors_by_kind.items():

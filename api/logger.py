@@ -29,6 +29,7 @@ import logging
 import os
 import queue
 import threading
+
 # import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -47,8 +48,8 @@ DB_URL: str = os.getenv(
 )
 LOG_DIR = Path(os.getenv("LOG_DIR", "logs"))
 JSONL_FILE = LOG_DIR / "predictions.jsonl"
-BUFFER_FLUSH_INTERVAL: float = float(os.getenv("LOG_FLUSH_INTERVAL", "5"))   # seconds
-BUFFER_MAX_SIZE: int = int(os.getenv("LOG_BUFFER_SIZE", "200"))               # rows
+BUFFER_FLUSH_INTERVAL: float = float(os.getenv("LOG_FLUSH_INTERVAL", "5"))  # seconds
+BUFFER_MAX_SIZE: int = int(os.getenv("LOG_BUFFER_SIZE", "200"))  # rows
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -60,10 +61,13 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 try:
     from api.schemas import FeatureSchema  # type: ignore
+
     _SCHEMA: FeatureSchema | None = FeatureSchema()
 except ImportError:
     _SCHEMA = None
-    logger.warning("api.schemas not importable — schema metadata will be omitted from logs")
+    logger.warning(
+        "api.schemas not importable — schema metadata will be omitted from logs"
+    )
 
 # ---------------------------------------------------------------------------
 # Optional Postgres driver
@@ -71,15 +75,19 @@ except ImportError:
 try:
     import psycopg2
     import psycopg2.extras
+
     _PSYCOPG2_AVAILABLE = True
 except ImportError:
     _PSYCOPG2_AVAILABLE = False
-    logger.warning("psycopg2 not installed — DB logging disabled, falling back to JSONL only")
+    logger.warning(
+        "psycopg2 not installed — DB logging disabled, falling back to JSONL only"
+    )
 
 
 # ---------------------------------------------------------------------------
 # PredictionLog — canonical log record
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class PredictionLog:
@@ -87,24 +95,25 @@ class PredictionLog:
     Single prediction event.  Written to Postgres + JSONL.
     Consumed by monitoring/drift_report.py and monitoring/quality_report.py.
     """
-    request_id: str                        # UUID, set by caller or auto-generated
-    timestamp: str                         # ISO-8601 UTC
+
+    request_id: str  # UUID, set by caller or auto-generated
+    timestamp: str  # ISO-8601 UTC
     model_version: str
     model_alias: str
-    features: dict[str, Any]               # raw input features
-    prediction: int                        # 0 or 1
+    features: dict[str, Any]  # raw input features
+    prediction: int  # 0 or 1
     probability_class_0: float
     probability_class_1: float
     confidence: float
     latency_ms: float
-    ground_truth: int | None = None        # filled in later via label_outcome()
+    ground_truth: int | None = None  # filled in later via label_outcome()
     warnings: list[str] = field(default_factory=list)
-    schema_version: str = ""               # from FeatureSchema, if available
+    schema_version: str = ""  # from FeatureSchema, if available
 
     # ------------------------------------------------------------------
     def to_dict(self) -> dict:
         d = asdict(self)
-        d["features"] = json.dumps(self.features)   # serialise for Postgres TEXT col
+        d["features"] = json.dumps(self.features)  # serialise for Postgres TEXT col
         d["warnings"] = json.dumps(self.warnings)
         return d
 
@@ -211,6 +220,7 @@ def _write_to_db(rows: list[PredictionLog]) -> int:
 # JSONL helpers
 # ---------------------------------------------------------------------------
 
+
 def _ensure_log_dir() -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -272,7 +282,9 @@ def _drain_buffer() -> int:
             # DB missed some rows — they were still captured in JSONL
             logger.warning(
                 "DB wrote %d/%d rows; all %d captured in JSONL",
-                db_written, len(rows), jsonl_written,
+                db_written,
+                len(rows),
+                jsonl_written,
             )
         else:
             logger.debug("Flushed %d log rows to DB + JSONL", len(rows))
@@ -291,6 +303,7 @@ def _start_worker() -> None:
 # ---------------------------------------------------------------------------
 # Public: log_prediction
 # ---------------------------------------------------------------------------
+
 
 def log_prediction(
     features: dict[str, Any],
@@ -359,7 +372,7 @@ def log_prediction(
 
 def log_prediction_from_result(
     features: dict[str, Any],
-    result,                        # PredictionResult from predict.py
+    result,  # PredictionResult from predict.py
     request_id: str | None = None,
     ground_truth: int | None = None,
 ) -> str:
@@ -386,6 +399,7 @@ def log_prediction_from_result(
 # Public: label_outcome  (called when ground truth becomes available later)
 # ---------------------------------------------------------------------------
 
+
 def label_outcome(request_id: str, ground_truth: int) -> bool:
     """
     Update the ground_truth column for an already-logged prediction.
@@ -394,7 +408,9 @@ def label_outcome(request_id: str, ground_truth: int) -> bool:
     Returns True if the DB update succeeded, False otherwise.
     """
     if not _PSYCOPG2_AVAILABLE:
-        logger.warning("label_outcome: DB unavailable — cannot update request_id=%s", request_id)
+        logger.warning(
+            "label_outcome: DB unavailable — cannot update request_id=%s", request_id
+        )
         return False
     try:
         conn = _get_conn()
@@ -418,6 +434,7 @@ def label_outcome(request_id: str, ground_truth: int) -> bool:
 # Public: flush  (called on graceful shutdown, or by tests)
 # ---------------------------------------------------------------------------
 
+
 def flush() -> int:
     """
     Force-flush the in-memory buffer to DB + JSONL immediately.
@@ -434,6 +451,7 @@ def shutdown() -> None:
 # ---------------------------------------------------------------------------
 # Public: query_logs  (used by monitoring jobs)
 # ---------------------------------------------------------------------------
+
 
 def query_logs(
     start: datetime,
@@ -460,10 +478,14 @@ def query_logs(
     features column is parsed back from JSON string → dict.
     """
     if _PSYCOPG2_AVAILABLE:
-        return _query_logs_db(start, end, model_version, include_ground_truth_only, limit)
+        return _query_logs_db(
+            start, end, model_version, include_ground_truth_only, limit
+        )
     else:
         logger.warning("query_logs: DB unavailable — reading from JSONL fallback")
-        return _query_logs_jsonl(start, end, model_version, include_ground_truth_only, limit)
+        return _query_logs_jsonl(
+            start, end, model_version, include_ground_truth_only, limit
+        )
 
 
 def _query_logs_db(
@@ -568,7 +590,7 @@ if __name__ == "__main__":
         latency_ms = 4.2
         model_version = "v_test"
         model_alias = "production"
-        warnings = []
+        warnings: list[str] = []
 
     features = {"age": 34, "income": 55000, "score": 0.82}
 
@@ -588,6 +610,7 @@ if __name__ == "__main__":
 
     # Query back
     from datetime import timedelta
+
     now = datetime.now(timezone.utc)
     df = query_logs(now - timedelta(minutes=1), now + timedelta(minutes=1))
     logger.info("query_logs() returned %d rows", len(df))

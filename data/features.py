@@ -31,6 +31,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import OrdinalEncoder, StandardScaler
+
 # from sklearn.preprocessing import OneHotEncoder
 # from sklearn.compose import ColumnTransformer
 
@@ -70,10 +71,10 @@ CATEGORICAL_COLS: list[str] = [
 
 # Columns to drop before returning the feature matrix
 DROP_COLS: list[str] = [
-    "transaction_id",   # identifier, not a feature
-    "customer_id",      # high-cardinality ID
-    "timestamp",        # replaced by temporal features
-    "raw_notes",        # free text — not used
+    "transaction_id",  # identifier, not a feature
+    "customer_id",  # high-cardinality ID
+    "timestamp",  # replaced by temporal features
+    "raw_notes",  # free text — not used
 ]
 
 # Timestamp column name
@@ -86,6 +87,7 @@ DEFAULT_PIPELINE_PATH: Path = Path("artifacts/feature_pipeline.pkl")
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _cast_types(df: pd.DataFrame) -> pd.DataFrame:
     """Ensure correct dtypes so downstream transforms never break."""
@@ -111,13 +113,15 @@ def _cast_types(df: pd.DataFrame) -> pd.DataFrame:
 def _extract_temporal_features(df: pd.DataFrame) -> pd.DataFrame:
     """Derive hour, day-of-week, is_weekend, days_since_epoch from timestamp."""
     if TIMESTAMP_COL not in df.columns:
-        logger.warning("'%s' column not found; skipping temporal features.", TIMESTAMP_COL)
+        logger.warning(
+            "'%s' column not found; skipping temporal features.", TIMESTAMP_COL
+        )
         return df
 
     ts = df[TIMESTAMP_COL]
 
     df["hour_of_day"] = ts.dt.hour.astype(np.int8)
-    df["day_of_week"] = ts.dt.dayofweek.astype(np.int8)   # 0=Mon … 6=Sun
+    df["day_of_week"] = ts.dt.dayofweek.astype(np.int8)  # 0=Mon … 6=Sun
     df["is_weekend"] = (df["day_of_week"] >= 5).astype(np.int8)
     df["month"] = ts.dt.month.astype(np.int8)
 
@@ -143,8 +147,8 @@ def _add_interaction_features(df: pd.DataFrame) -> pd.DataFrame:
     # Transaction velocity flag — many txns in 30d AND large amount
     if "num_transactions_30d" in df.columns and "amount" in df.columns:
         df["high_velocity_large_amount"] = (
-            (df["num_transactions_30d"] > df["num_transactions_30d"].median()) &
-            (df["amount"] > df["amount"].median())
+            (df["num_transactions_30d"] > df["num_transactions_30d"].median())
+            & (df["amount"] > df["amount"].median())
         ).astype(np.int8)
 
     return df
@@ -170,6 +174,7 @@ def _impute(df: pd.DataFrame) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # FeaturePipeline
 # ---------------------------------------------------------------------------
+
 
 class FeaturePipeline:
     """
@@ -318,15 +323,19 @@ class FeaturePipeline:
         """Return the list of output feature column names after transform."""
         if not self._is_fitted:
             raise RuntimeError("Pipeline not fitted yet.")
-        return self._scale_cols_present + self._cat_cols_present + [
-            "hour_of_day",
-            "day_of_week",
-            "is_weekend",
-            "month",
-            "days_since_epoch",
-            "amount_per_credit_score",
-            "high_velocity_large_amount",
-        ]
+        return (
+            self._scale_cols_present
+            + self._cat_cols_present
+            + [
+                "hour_of_day",
+                "day_of_week",
+                "is_weekend",
+                "month",
+                "days_since_epoch",
+                "amount_per_credit_score",
+                "high_velocity_large_amount",
+            ]
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -392,6 +401,7 @@ class FeaturePipeline:
 #         transformed = pipeline.fit_transform(X_df)
 #     else:
 #         transformed = pipeline.transform(X_df)
+
 
 #     return transformed, y, pipeline
 def build_features(

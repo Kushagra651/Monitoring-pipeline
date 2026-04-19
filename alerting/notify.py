@@ -47,35 +47,42 @@ log = logging.getLogger(__name__)
 
 # ── Env config ────────────────────────────────────────────────────────────────
 
-SLACK_WEBHOOK_URL      = os.getenv("SLACK_WEBHOOK_URL", "")
-PAGERDUTY_ROUTING_KEY  = os.getenv("PAGERDUTY_ROUTING_KEY", "")
-ALERT_WEBHOOK_URL      = os.getenv("ALERT_WEBHOOK_URL", "")
-SMTP_HOST              = os.getenv("SMTP_HOST", "localhost")
-SMTP_PORT              = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER              = os.getenv("SMTP_USER", "")
-SMTP_PASS              = os.getenv("SMTP_PASS", "")
-ALERT_EMAIL_FROM       = os.getenv("ALERT_EMAIL_FROM", "ml-monitor@company.com")
-ALERT_EMAIL_TO         = os.getenv("ALERT_EMAIL_TO", "")   # comma-separated
-DEDUP_WINDOW_SECONDS   = int(os.getenv("ALERT_DEDUP_WINDOW_SEC", "300"))   # 5 min
-HTTP_TIMEOUT           = int(os.getenv("ALERT_HTTP_TIMEOUT_SEC", "10"))
-ENV_LABEL              = os.getenv("ENVIRONMENT", "production")
+SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL", "")
+PAGERDUTY_ROUTING_KEY = os.getenv("PAGERDUTY_ROUTING_KEY", "")
+ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
+SMTP_HOST = os.getenv("SMTP_HOST", "localhost")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "")
+SMTP_PASS = os.getenv("SMTP_PASS", "")
+ALERT_EMAIL_FROM = os.getenv("ALERT_EMAIL_FROM", "ml-monitor@company.com")
+ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO", "")  # comma-separated
+DEDUP_WINDOW_SECONDS = int(os.getenv("ALERT_DEDUP_WINDOW_SEC", "300"))  # 5 min
+HTTP_TIMEOUT = int(os.getenv("ALERT_HTTP_TIMEOUT_SEC", "10"))
+ENV_LABEL = os.getenv("ENVIRONMENT", "production")
 
 # PagerDuty severity mapping
 _PD_SEVERITY = {"info": "info", "warning": "warning", "critical": "critical"}
 _SLACK_COLORS = {"info": "#36a64f", "warning": "#ffcc00", "critical": "#ff0000"}
-_SLACK_EMOJI  = {"info": ":information_source:", "warning": ":warning:", "critical": ":fire:"}
+_SLACK_EMOJI = {
+    "info": ":information_source:",
+    "warning": ":warning:",
+    "critical": ":fire:",
+}
 
 
 # ── Alert record ──────────────────────────────────────────────────────────────
+
 
 @dataclass
 class Alert:
     title: str
     message: str
-    severity: str = "warning"         # info | warning | critical
-    channel: str = "slack"            # slack | pagerduty | email | webhook | all | log
+    severity: str = "warning"  # info | warning | critical
+    channel: str = "slack"  # slack | pagerduty | email | webhook | all | log
     labels: Dict[str, str] = field(default_factory=dict)
-    timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    timestamp: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
     environment: str = field(default_factory=lambda: ENV_LABEL)
 
     @property
@@ -108,7 +115,10 @@ def _is_duplicate(alert: Alert) -> bool:
 
 # ── HTTP helper ───────────────────────────────────────────────────────────────
 
-def _http_post(url: str, payload: Dict[str, Any], headers: Optional[Dict[str, str]] = None) -> int:
+
+def _http_post(
+    url: str, payload: Dict[str, Any], headers: Optional[Dict[str, str]] = None
+) -> int:
     """Simple urllib POST — no requests dependency required."""
     body = json.dumps(payload).encode("utf-8")
     hdrs = {"Content-Type": "application/json", **(headers or {})}
@@ -117,7 +127,9 @@ def _http_post(url: str, payload: Dict[str, Any], headers: Optional[Dict[str, st
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
             return resp.status
     except urllib.error.HTTPError as e:
-        log.error("HTTP %d posting to %s: %s", e.code, url, e.read().decode(errors="replace"))
+        log.error(
+            "HTTP %d posting to %s: %s", e.code, url, e.read().decode(errors="replace")
+        )
         return e.code
     except Exception as e:
         log.error("Request to %s failed: %s", url, e)
@@ -126,6 +138,7 @@ def _http_post(url: str, payload: Dict[str, Any], headers: Optional[Dict[str, st
 
 # ── Channel implementations ───────────────────────────────────────────────────
 
+
 def _send_slack(alert: Alert) -> bool:
     if not SLACK_WEBHOOK_URL:
         log.warning("SLACK_WEBHOOK_URL not set — skipping Slack alert.")
@@ -133,31 +146,38 @@ def _send_slack(alert: Alert) -> bool:
 
     label_text = "  |  ".join(f"{k}={v}" for k, v in alert.labels.items())
     payload = {
-        "attachments": [{
-            "color": _SLACK_COLORS.get(alert.severity, "#888888"),
-            "blocks": [
-                {
-                    "type": "header",
-                    "text": {
-                        "type": "plain_text",
-                        "text": f"{_SLACK_EMOJI.get(alert.severity, '')} {alert.title}",
+        "attachments": [
+            {
+                "color": _SLACK_COLORS.get(alert.severity, "#888888"),
+                "blocks": [
+                    {
+                        "type": "header",
+                        "text": {
+                            "type": "plain_text",
+                            "text": f"{_SLACK_EMOJI.get(alert.severity, '')} {alert.title}",
+                        },
                     },
-                },
-                {
-                    "type": "section",
-                    "text": {"type": "mrkdwn", "text": alert.message},
-                },
-                {
-                    "type": "context",
-                    "elements": [{"type": "mrkdwn", "text": (
-                        f"*Severity:* {alert.severity.upper()}  |  "
-                        f"*Env:* {alert.environment}  |  "
-                        f"*Time:* {alert.timestamp}"
-                        + (f"  |  {label_text}" if label_text else "")
-                    )}],
-                },
-            ],
-        }]
+                    {
+                        "type": "section",
+                        "text": {"type": "mrkdwn", "text": alert.message},
+                    },
+                    {
+                        "type": "context",
+                        "elements": [
+                            {
+                                "type": "mrkdwn",
+                                "text": (
+                                    f"*Severity:* {alert.severity.upper()}  |  "
+                                    f"*Env:* {alert.environment}  |  "
+                                    f"*Time:* {alert.timestamp}"
+                                    + (f"  |  {label_text}" if label_text else "")
+                                ),
+                            }
+                        ],
+                    },
+                ],
+            }
+        ]
     }
     status = _http_post(SLACK_WEBHOOK_URL, payload)
     ok = status == 200
@@ -220,8 +240,8 @@ def _send_email(alert: Alert) -> bool:
 
     msg = MIMEMultipart("alternative")
     msg["Subject"] = f"[ML Monitor] [{alert.severity.upper()}] {alert.title}"
-    msg["From"]    = ALERT_EMAIL_FROM
-    msg["To"]      = ", ".join(recipients)
+    msg["From"] = ALERT_EMAIL_FROM
+    msg["To"] = ", ".join(recipients)
     msg.attach(MIMEText(alert.message, "plain"))
     msg.attach(MIMEText(body_html, "html"))
 
@@ -252,10 +272,10 @@ def _send_webhook(alert: Alert) -> bool:
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 _CHANNEL_FN = {
-    "slack":      _send_slack,
-    "pagerduty":  _send_pagerduty,
-    "email":      _send_email,
-    "webhook":    _send_webhook,
+    "slack": _send_slack,
+    "pagerduty": _send_pagerduty,
+    "email": _send_email,
+    "webhook": _send_webhook,
 }
 
 
@@ -284,7 +304,7 @@ def send_alert(
     """
     # Normalise legacy kwargs
     severity = severity or level or "warning"
-    labels   = labels or tags or {}
+    labels = labels or tags or {}
 
     alert = Alert(
         title=title,
@@ -297,11 +317,16 @@ def send_alert(
     # Always log
     log.info(
         "ALERT [%s] %s | %s | labels=%s",
-        alert.severity.upper(), alert.title, alert.message[:120], alert.labels,
+        alert.severity.upper(),
+        alert.title,
+        alert.message[:120],
+        alert.labels,
     )
 
     if _is_duplicate(alert):
-        log.info("Alert suppressed (dedup window %ds): %s", DEDUP_WINDOW_SECONDS, alert.title)
+        log.info(
+            "Alert suppressed (dedup window %ds): %s", DEDUP_WINDOW_SECONDS, alert.title
+        )
         return {"dedup": False}
 
     if channel == "log":
@@ -326,13 +351,15 @@ def send_alert(
     if results and not any(results.values()):
         log.error(
             "ALL alert channels failed for: [%s] %s",
-            alert.severity.upper(), alert.title,
+            alert.severity.upper(),
+            alert.title,
         )
 
     return results
 
 
 # ── Convenience wrappers ──────────────────────────────────────────────────────
+
 
 def alert_info(title: str, message: str, **kwargs) -> Dict[str, bool]:
     return send_alert(title=title, message=message, severity="info", **kwargs)

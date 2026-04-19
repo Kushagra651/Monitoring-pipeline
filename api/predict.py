@@ -52,6 +52,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 try:
     from api.schemas import FeatureSchema  # type: ignore
+
     _SCHEMA_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _SCHEMA_AVAILABLE = False
@@ -62,15 +63,17 @@ except ImportError:  # pragma: no cover
 # Data classes
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class PredictionResult:
     """Structured return value from predict()."""
-    prediction: int                        # 0 or 1 (binary classification)
+
+    prediction: int  # 0 or 1 (binary classification)
     probability_class_0: float
     probability_class_1: float
-    confidence: float                      # max(probabilities)
+    confidence: float  # max(probabilities)
     model_version: str
-    model_alias: str                       # e.g. "production"
+    model_alias: str  # e.g. "production"
     latency_ms: float
     features_used: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
@@ -94,11 +97,12 @@ class PredictionResult:
 @dataclass
 class _ModelBundle:
     """Internal holder for a loaded model + pipeline snapshot."""
+
     model: Any
     pipeline: Any
     version: str
     alias: str
-    registry_mtime: float          # mtime of production_model.json at load time
+    registry_mtime: float  # mtime of production_model.json at load time
     loaded_at: float = field(default_factory=time.time)
 
 
@@ -112,6 +116,7 @@ _lock = threading.RLock()
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _read_registry() -> dict:
     """Parse production_model.json and return its contents."""
@@ -151,8 +156,14 @@ def _load_bundle() -> _ModelBundle:
     alias = registry.get("alias", "production")
 
     # Prefer explicit paths from registry; fall back to symlinks
-    model_path = Path(registry["model_path"]) if "model_path" in registry else MODEL_SYMLINK
-    pipeline_path = Path(registry["pipeline_path"]) if "pipeline_path" in registry else PIPELINE_SYMLINK
+    model_path = (
+        Path(registry["model_path"]) if "model_path" in registry else MODEL_SYMLINK
+    )
+    pipeline_path = (
+        Path(registry["pipeline_path"])
+        if "pipeline_path" in registry
+        else PIPELINE_SYMLINK
+    )
 
     logger.info("Loading model bundle version=%s from %s", version, model_path)
     model = _load_pickle(model_path)
@@ -173,7 +184,7 @@ def _ensure_loaded() -> _ModelBundle:
     global _bundle
     if _bundle is None:
         with _lock:
-            if _bundle is None:           # double-checked locking
+            if _bundle is None:  # double-checked locking
                 _bundle = _load_bundle()
     return _bundle
 
@@ -181,6 +192,7 @@ def _ensure_loaded() -> _ModelBundle:
 # ---------------------------------------------------------------------------
 # Public: hot-reload
 # ---------------------------------------------------------------------------
+
 
 def reload_if_stale() -> bool:
     """
@@ -198,7 +210,7 @@ def reload_if_stale() -> bool:
     bundle = _ensure_loaded()
 
     if current_mtime <= bundle.registry_mtime:
-        return False                      # nothing changed
+        return False  # nothing changed
 
     logger.info(
         "production_model.json updated (mtime %.3f → %.3f) — hot-reloading model",
@@ -230,6 +242,7 @@ def force_reload() -> None:
 # Input validation helpers
 # ---------------------------------------------------------------------------
 
+
 def _validate_features(features: dict, warnings: list[str]) -> pd.DataFrame:
     """
     1. Check all expected columns are present (uses FeatureSchema if available).
@@ -240,8 +253,8 @@ def _validate_features(features: dict, warnings: list[str]) -> pd.DataFrame:
     """
     if _SCHEMA_AVAILABLE:
         schema: FeatureSchema = FeatureSchema()
-        expected_cols: list[str] = schema.feature_columns        # e.g. ["age", "income", ...]
-        dtype_map: dict[str, str] = schema.feature_dtypes        # e.g. {"age": "int64", ...}
+        expected_cols: list[str] = schema.feature_columns  # e.g. ["age", "income", ...]
+        dtype_map: dict[str, str] = schema.feature_dtypes  # e.g. {"age": "int64", ...}
 
         missing = [c for c in expected_cols if c not in features]
         if missing:
@@ -272,6 +285,7 @@ def _validate_features(features: dict, warnings: list[str]) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Public: predict
 # ---------------------------------------------------------------------------
+
 
 def predict(features: dict) -> PredictionResult:
     """
@@ -322,7 +336,7 @@ def predict(features: dict) -> PredictionResult:
             prediction = int(raw_prediction)
 
         if hasattr(bundle.model, "predict_proba"):
-            proba = bundle.model.predict_proba(X)[0]          # shape (n_classes,)
+            proba = bundle.model.predict_proba(X)[0]  # shape (n_classes,)
             # Normalise to exactly 2 classes; handle multi-class gracefully
             if len(proba) >= 2:
                 prob_0, prob_1 = float(proba[0]), float(proba[1])
@@ -333,7 +347,9 @@ def predict(features: dict) -> PredictionResult:
             # Model has no predict_proba (e.g. LinearSVC) — use hard decision
             prob_1 = 1.0 if prediction == 1 else 0.0
             prob_0 = 1.0 - prob_1
-            warnings_list.append("Model does not support predict_proba; probabilities are hard 0/1")
+            warnings_list.append(
+                "Model does not support predict_proba; probabilities are hard 0/1"
+            )
 
     except Exception as exc:
         raise RuntimeError(f"Model inference failed: {exc}") from exc
@@ -357,6 +373,7 @@ def predict(features: dict) -> PredictionResult:
 # ---------------------------------------------------------------------------
 # Public: model info (used by /health and /model-info endpoints in main.py)
 # ---------------------------------------------------------------------------
+
 
 def get_model_info() -> dict:
     """
@@ -382,6 +399,7 @@ def get_model_info() -> dict:
 # ---------------------------------------------------------------------------
 # Batch prediction convenience (used by drift_report.py, evaluate.py)
 # ---------------------------------------------------------------------------
+
 
 def predict_batch(records: list[dict]) -> list[PredictionResult]:
     """
@@ -431,11 +449,15 @@ if __name__ == "__main__":
         stale = reload_if_stale()
         logger.info("reload_if_stale() returned: %s", stale)
 
-        logger.info("Model info: %s", json.dumps(get_model_info(), indent=2, default=str))
+        logger.info(
+            "Model info: %s", json.dumps(get_model_info(), indent=2, default=str)
+        )
         logger.info("predict.py self-test passed.")
         sys.exit(0)
 
     except FileNotFoundError as exc:
         logger.warning("Artifacts not present yet (expected during dev): %s", exc)
-        logger.info("predict.py import structure OK — run training pipeline to generate artifacts.")
+        logger.info(
+            "predict.py import structure OK — run training pipeline to generate artifacts."
+        )
         sys.exit(0)

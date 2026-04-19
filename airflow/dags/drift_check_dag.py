@@ -17,16 +17,17 @@ from datetime import timedelta
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator
+
 # from airflow.operators.empty import EmptyOperator
 from airflow.utils.dates import days_ago
 
 log = logging.getLogger(__name__)
 
-SCHEDULE         = os.getenv("DRIFT_CHECK_SCHEDULE", "0 */6 * * *")
-WINDOW_HOURS     = int(os.getenv("DRIFT_WINDOW_HOURS", "6"))
-MIN_WINDOW_ROWS  = int(os.getenv("DRIFT_MIN_SAMPLES", "30"))
-ARTIFACTS_DIR    = os.getenv("ARTIFACTS_DIR", "artifacts")
-RETRAIN_VAR_KEY  = "drift_retrain_triggered"   # Airflow Variable set by gate task
+SCHEDULE = os.getenv("DRIFT_CHECK_SCHEDULE", "0 */6 * * *")
+WINDOW_HOURS = int(os.getenv("DRIFT_WINDOW_HOURS", "6"))
+MIN_WINDOW_ROWS = int(os.getenv("DRIFT_MIN_SAMPLES", "30"))
+ARTIFACTS_DIR = os.getenv("ARTIFACTS_DIR", "artifacts")
+RETRAIN_VAR_KEY = "drift_retrain_triggered"  # Airflow Variable set by gate task
 
 DEFAULT_ARGS = {
     "owner": "ml-platform",
@@ -39,6 +40,7 @@ DEFAULT_ARGS = {
 
 
 # ── Task callables ────────────────────────────────────────────────────────────
+
 
 def task_load_reference(**ctx):
     """Load training reference dataset from latest registered model artifacts."""
@@ -54,7 +56,9 @@ def task_load_reference(**ctx):
         registry = json.load(f)
 
     # Find production model entry
-    prod = next((m for m in registry.get("models", []) if m.get("status") == "production"), None)
+    prod = next(
+        (m for m in registry.get("models", []) if m.get("status") == "production"), None
+    )
     if prod is None:
         raise RuntimeError("No production model in registry.")
 
@@ -63,7 +67,9 @@ def task_load_reference(**ctx):
 
     # Fallback: any features parquet for that version
     if not ref_path.exists():
-        candidates = sorted(Path(ARTIFACTS_DIR).glob("features_*.parquet"), reverse=True)
+        candidates = sorted(
+            Path(ARTIFACTS_DIR).glob("features_*.parquet"), reverse=True
+        )
         if not candidates:
             raise FileNotFoundError("No reference features parquet found.")
         ref_path = candidates[0]
@@ -71,9 +77,9 @@ def task_load_reference(**ctx):
 
     ref_df = pd.read_parquet(ref_path)
     ti = ctx["ti"]
-    ti.xcom_push(key="ref_path",      value=str(ref_path))
+    ti.xcom_push(key="ref_path", value=str(ref_path))
     ti.xcom_push(key="model_version", value=tag)
-    ti.xcom_push(key="ref_size",      value=len(ref_df))
+    ti.xcom_push(key="ref_size", value=len(ref_df))
     log.info("Reference loaded: %d rows  model_version=%s", len(ref_df), tag)
 
 
@@ -85,16 +91,20 @@ def task_fetch_live_window(**ctx):
     ti = ctx["ti"]
     now = datetime.now(timezone.utc)
     window_start = (now - timedelta(hours=WINDOW_HOURS)).isoformat()
-    window_end   = now.isoformat()
+    window_end = now.isoformat()
 
     try:
         from api.logger import get_logger
-        records = get_logger().query_logs(start=window_start, end=window_end, limit=50_000)
+
+        records = get_logger().query_logs(
+            start=window_start, end=window_end, limit=50_000
+        )
         df = pd.DataFrame(records)
     except Exception as e:
         log.warning("Logger unavailable (%s). Attempting JSONL fallback.", e)
         import glob
         import json
+
         # from pathlib import Path
         rows = []
         for f in sorted(glob.glob(f"{ARTIFACTS_DIR}/logs/*.jsonl"), reverse=True)[:7]:
@@ -117,10 +127,10 @@ def task_fetch_live_window(**ctx):
     live_path = f"{ARTIFACTS_DIR}/live_window_{ctx['ds']}.parquet"
     df.to_parquet(live_path, index=False)
 
-    ti.xcom_push(key="live_path",    value=live_path)
+    ti.xcom_push(key="live_path", value=live_path)
     ti.xcom_push(key="window_start", value=window_start)
-    ti.xcom_push(key="window_end",   value=window_end)
-    ti.xcom_push(key="live_size",    value=len(df))
+    ti.xcom_push(key="window_end", value=window_end)
+    ti.xcom_push(key="live_size", value=len(df))
     log.info("Live window: %d rows [%s → %s]", len(df), window_start, window_end)
 
 
@@ -129,15 +139,25 @@ def task_compute_drift(**ctx):
     from monitoring.drift_report import compute_drift_report
 
     ti = ctx["ti"]
-    ref_df   = pd.read_parquet(ti.xcom_pull(task_ids="load_reference",    key="ref_path"))
-    live_df  = pd.read_parquet(ti.xcom_pull(task_ids="fetch_live_window", key="live_path"))
-    version  = ti.xcom_pull(task_ids="load_reference",    key="model_version")
-    w_start  = ti.xcom_pull(task_ids="fetch_live_window", key="window_start")
-    w_end    = ti.xcom_pull(task_ids="fetch_live_window", key="window_end")
+    ref_df = pd.read_parquet(ti.xcom_pull(task_ids="load_reference", key="ref_path"))
+    live_df = pd.read_parquet(
+        ti.xcom_pull(task_ids="fetch_live_window", key="live_path")
+    )
+    version = ti.xcom_pull(task_ids="load_reference", key="model_version")
+    w_start = ti.xcom_pull(task_ids="fetch_live_window", key="window_start")
+    w_end = ti.xcom_pull(task_ids="fetch_live_window", key="window_end")
 
     # Separate feature cols from log metadata
-    meta_cols = {"request_id", "predicted_class", "confidence", "model_version", "timestamp"}
-    feature_cols = [c for c in live_df.columns if c not in meta_cols and c in ref_df.columns]
+    meta_cols = {
+        "request_id",
+        "predicted_class",
+        "confidence",
+        "model_version",
+        "timestamp",
+    }
+    feature_cols = [
+        c for c in live_df.columns if c not in meta_cols and c in ref_df.columns
+    ]
 
     report = compute_drift_report(
         reference_df=ref_df[feature_cols],
@@ -150,12 +170,16 @@ def task_compute_drift(**ctx):
         save=True,
     )
 
-    ti.xcom_push(key="drift_detected",    value=report.overall_drifted)
-    ti.xcom_push(key="drifted_features",  value=report.drifted_features)
-    ti.xcom_push(key="drift_report_id",   value=report.report_id)
-    ti.xcom_push(key="critical_count",    value=report.summary.get("critical_count", 0))
-    log.info("Drift: drifted=%s features=%s critical=%d",
-             report.overall_drifted, report.drifted_features, report.summary.get("critical_count", 0))
+    ti.xcom_push(key="drift_detected", value=report.overall_drifted)
+    ti.xcom_push(key="drifted_features", value=report.drifted_features)
+    ti.xcom_push(key="drift_report_id", value=report.report_id)
+    ti.xcom_push(key="critical_count", value=report.summary.get("critical_count", 0))
+    log.info(
+        "Drift: drifted=%s features=%s critical=%d",
+        report.overall_drifted,
+        report.drifted_features,
+        report.summary.get("critical_count", 0),
+    )
 
 
 def task_compute_quality(**ctx):
@@ -163,10 +187,12 @@ def task_compute_quality(**ctx):
     from monitoring.quality_report import compute_quality_report
 
     ti = ctx["ti"]
-    live_df = pd.read_parquet(ti.xcom_pull(task_ids="fetch_live_window", key="live_path"))
+    live_df = pd.read_parquet(
+        ti.xcom_pull(task_ids="fetch_live_window", key="live_path")
+    )
     version = ti.xcom_pull(task_ids="load_reference", key="model_version")
     w_start = ti.xcom_pull(task_ids="fetch_live_window", key="window_start")
-    w_end   = ti.xcom_pull(task_ids="fetch_live_window", key="window_end")
+    w_end = ti.xcom_pull(task_ids="fetch_live_window", key="window_end")
 
     report = compute_quality_report(
         log_df=live_df,
@@ -176,16 +202,21 @@ def task_compute_quality(**ctx):
         save=True,
     )
 
-    ti.xcom_push(key="quality_passed",    value=report.overall_passed)
-    ti.xcom_push(key="hard_failures",     value=report.hard_failures)
+    ti.xcom_push(key="quality_passed", value=report.overall_passed)
+    ti.xcom_push(key="hard_failures", value=report.hard_failures)
     ti.xcom_push(key="quality_report_id", value=report.report_id)
-    log.info("Quality: passed=%s hard_failures=%s", report.overall_passed, report.hard_failures)
+    log.info(
+        "Quality: passed=%s hard_failures=%s",
+        report.overall_passed,
+        report.hard_failures,
+    )
 
 
 def task_push_metrics(**ctx):
     """Refresh Prometheus metrics from latest reports."""
     try:
         from monitoring.prometheus_exporter import collect_all_metrics
+
         text = collect_all_metrics()
         log.info("Prometheus metrics refreshed (%d bytes)", len(text))
     except Exception as e:
@@ -201,9 +232,11 @@ def task_gate(**ctx):
     from airflow.models import Variable
 
     ti = ctx["ti"]
-    drift_detected = ti.xcom_pull(task_ids="compute_drift",   key="drift_detected") or False
+    drift_detected = (
+        ti.xcom_pull(task_ids="compute_drift", key="drift_detected") or False
+    )
     quality_passed = ti.xcom_pull(task_ids="compute_quality", key="quality_passed")
-    critical_count = ti.xcom_pull(task_ids="compute_drift",   key="critical_count") or 0
+    critical_count = ti.xcom_pull(task_ids="compute_drift", key="critical_count") or 0
 
     should_retrain = drift_detected or (quality_passed is False)
 
@@ -213,7 +246,10 @@ def task_gate(**ctx):
 
     log.info(
         "Gate: drift=%s quality_passed=%s critical=%d → retrain=%s",
-        drift_detected, quality_passed, critical_count, should_retrain,
+        drift_detected,
+        quality_passed,
+        critical_count,
+        should_retrain,
     )
     ti.xcom_push(key="should_retrain", value=should_retrain)
 
@@ -224,12 +260,19 @@ def task_gate(**ctx):
 def _on_drift_alert(ctx, drift_detected, quality_passed, critical_count):
     try:
         from alerting.notify import send_alert
+
         lines = []
         if drift_detected:
-            features = ctx["ti"].xcom_pull(task_ids="compute_drift", key="drifted_features") or []
+            features = (
+                ctx["ti"].xcom_pull(task_ids="compute_drift", key="drifted_features")
+                or []
+            )
             lines.append(f"Drift detected on: {features}  (critical={critical_count})")
         if not quality_passed:
-            failures = ctx["ti"].xcom_pull(task_ids="compute_quality", key="hard_failures") or []
+            failures = (
+                ctx["ti"].xcom_pull(task_ids="compute_quality", key="hard_failures")
+                or []
+            )
             lines.append(f"Quality failures: {failures}")
         send_alert(
             channel="slack",
@@ -245,6 +288,7 @@ def _on_drift_alert(ctx, drift_detected, quality_passed, critical_count):
 def _on_failure(context):
     try:
         from alerting.notify import send_alert
+
         ti = context["task_instance"]
         send_alert(
             channel="slack",
@@ -271,11 +315,21 @@ with DAG(
     doc_md=__doc__,
 ) as dag:
 
-    t_ref     = PythonOperator(task_id="load_reference",    python_callable=task_load_reference)
-    t_live    = PythonOperator(task_id="fetch_live_window", python_callable=task_fetch_live_window)
-    t_drift   = PythonOperator(task_id="compute_drift",     python_callable=task_compute_drift)
-    t_quality = PythonOperator(task_id="compute_quality",   python_callable=task_compute_quality)
-    t_metrics = PythonOperator(task_id="push_metrics",      python_callable=task_push_metrics)
-    t_gate    = PythonOperator(task_id="gate",              python_callable=task_gate)
+    t_ref = PythonOperator(
+        task_id="load_reference", python_callable=task_load_reference
+    )
+    t_live = PythonOperator(
+        task_id="fetch_live_window", python_callable=task_fetch_live_window
+    )
+    t_drift = PythonOperator(
+        task_id="compute_drift", python_callable=task_compute_drift
+    )
+    t_quality = PythonOperator(
+        task_id="compute_quality", python_callable=task_compute_quality
+    )
+    t_metrics = PythonOperator(
+        task_id="push_metrics", python_callable=task_push_metrics
+    )
+    t_gate = PythonOperator(task_id="gate", python_callable=task_gate)
 
     t_ref >> t_live >> [t_drift, t_quality] >> t_metrics >> t_gate

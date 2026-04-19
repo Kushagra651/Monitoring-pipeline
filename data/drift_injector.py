@@ -23,6 +23,7 @@ so Airflow DAGs and tests can drive injection declaratively.
 from __future__ import annotations
 
 import logging
+
 # import random
 from dataclasses import dataclass, field
 from enum import Enum
@@ -37,15 +38,16 @@ logger = logging.getLogger(__name__)
 # Enums & Config
 # ---------------------------------------------------------------------------
 
+
 class DriftType(str, Enum):
-    COVARIATE        = "covariate"
-    LABEL            = "label"
-    CONCEPT          = "concept"
-    MISSING_VALUE    = "missing_value"
-    SCHEMA           = "schema"
-    CATEGORICAL      = "categorical"
-    TEMPORAL         = "temporal"
-    NONE             = "none"           # pass-through (useful in A/B tests)
+    COVARIATE = "covariate"
+    LABEL = "label"
+    CONCEPT = "concept"
+    MISSING_VALUE = "missing_value"
+    SCHEMA = "schema"
+    CATEGORICAL = "categorical"
+    TEMPORAL = "temporal"
+    NONE = "none"  # pass-through (useful in A/B tests)
 
 
 @dataclass
@@ -69,8 +71,9 @@ class DriftConfig:
     extra:
         Injector-specific kwargs passed through as-is.
     """
+
     drift_type: DriftType = DriftType.NONE
-    intensity: float = 0.3              # fraction of rows / magnitude
+    intensity: float = 0.3  # fraction of rows / magnitude
     affected_columns: list[str] = field(default_factory=list)
     gradual: bool = False
     seed: int = 42
@@ -81,15 +84,16 @@ class DriftConfig:
 # Default column sets (fallbacks when affected_columns is empty)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_NUMERIC_COLS  = ["amount", "age", "credit_score", "num_transactions_30d"]
-_DEFAULT_CAT_COLS      = ["currency", "channel", "account_type"]
-_LABEL_COL             = "label"
-_TIMESTAMP_COL         = "timestamp"
+_DEFAULT_NUMERIC_COLS = ["amount", "age", "credit_score", "num_transactions_30d"]
+_DEFAULT_CAT_COLS = ["currency", "channel", "account_type"]
+_LABEL_COL = "label"
+_TIMESTAMP_COL = "timestamp"
 
 
 # ---------------------------------------------------------------------------
 # 1. Covariate drift
 # ---------------------------------------------------------------------------
+
 
 def inject_covariate_drift(
     df: pd.DataFrame,
@@ -134,7 +138,12 @@ def inject_covariate_drift(
             noise = rng.normal(loc=shift, scale=std * 0.1, size=n_affected)
             df.loc[df.index[idx], col] = series.iloc[idx].values + noise
 
-        logger.debug("Covariate drift injected into '%s' | shift=%.4f | gradual=%s", col, shift, gradual)
+        logger.debug(
+            "Covariate drift injected into '%s' | shift=%.4f | gradual=%s",
+            col,
+            shift,
+            gradual,
+        )
 
     return df
 
@@ -142,6 +151,7 @@ def inject_covariate_drift(
 # ---------------------------------------------------------------------------
 # 2. Label drift
 # ---------------------------------------------------------------------------
+
 
 def inject_label_drift(
     df: pd.DataFrame,
@@ -179,7 +189,9 @@ def inject_label_drift(
         elif delta < 0:
             # Need fewer positives — flip positives → negative
             pos_idx = labels[labels == 1].index.tolist()
-            flip_idx = rng.choice(pos_idx, size=min(-delta, len(pos_idx)), replace=False)
+            flip_idx = rng.choice(
+                pos_idx, size=min(-delta, len(pos_idx)), replace=False
+            )
             labels.loc[flip_idx] = 0
     else:
         # Randomly flip ``intensity`` fraction of labels
@@ -196,6 +208,7 @@ def inject_label_drift(
 # ---------------------------------------------------------------------------
 # 3. Concept drift
 # ---------------------------------------------------------------------------
+
 
 def inject_concept_drift(
     df: pd.DataFrame,
@@ -246,6 +259,7 @@ def inject_concept_drift(
 # 4. Missing value drift
 # ---------------------------------------------------------------------------
 
+
 def inject_missing_value_drift(
     df: pd.DataFrame,
     *,
@@ -276,6 +290,7 @@ def inject_missing_value_drift(
 # ---------------------------------------------------------------------------
 # 5. Schema drift
 # ---------------------------------------------------------------------------
+
 
 def inject_schema_drift(
     df: pd.DataFrame,
@@ -325,6 +340,7 @@ def inject_schema_drift(
 # 6. Categorical drift
 # ---------------------------------------------------------------------------
 
+
 def inject_categorical_drift(
     df: pd.DataFrame,
     *,
@@ -349,14 +365,18 @@ def inject_categorical_drift(
             continue
 
         # Determine new labels to inject
-        new_labels = (new_categories or {}).get(col, [f"unknown_{col}_0", f"unknown_{col}_1"])
+        new_labels = (new_categories or {}).get(
+            col, [f"unknown_{col}_0", f"unknown_{col}_1"]
+        )
         n_affected = max(1, int(n * intensity))
         idx = rng.choice(n, size=n_affected, replace=False)
         chosen_labels = rng.choice(new_labels, size=n_affected)
         df.iloc[idx, df.columns.get_loc(col)] = chosen_labels
         logger.debug(
             "Categorical drift: %d rows in '%s' set to unseen labels %s.",
-            n_affected, col, new_labels,
+            n_affected,
+            col,
+            new_labels,
         )
 
     return df
@@ -365,6 +385,7 @@ def inject_categorical_drift(
 # ---------------------------------------------------------------------------
 # 7. Temporal drift
 # ---------------------------------------------------------------------------
+
 
 def inject_temporal_drift(
     df: pd.DataFrame,
@@ -392,7 +413,9 @@ def inject_temporal_drift(
     # Insert time gap after midpoint
     gap = pd.Timedelta(hours=gap_hours)
     ts.iloc[midpoint:] = ts.iloc[midpoint:] + gap
-    logger.debug("Temporal drift: gap of %.1fh inserted at row %d.", gap_hours, midpoint)
+    logger.debug(
+        "Temporal drift: gap of %.1fh inserted at row %d.", gap_hours, midpoint
+    )
 
     # Shuffle a fraction of timestamps (out-of-order)
     n_shuffle = max(1, int(n * out_of_order_fraction))
@@ -409,6 +432,7 @@ def inject_temporal_drift(
 # ---------------------------------------------------------------------------
 # Dispatcher
 # ---------------------------------------------------------------------------
+
 
 def inject_drift(df: pd.DataFrame, config: DriftConfig) -> pd.DataFrame:
     """
@@ -428,7 +452,10 @@ def inject_drift(df: pd.DataFrame, config: DriftConfig) -> pd.DataFrame:
     """
     logger.info(
         "Injecting drift | type=%s | intensity=%.2f | gradual=%s | seed=%d",
-        config.drift_type, config.intensity, config.gradual, config.seed,
+        config.drift_type,
+        config.intensity,
+        config.gradual,
+        config.seed,
     )
 
     kwargs: dict[str, Any] = dict(
@@ -494,6 +521,7 @@ def inject_drift(df: pd.DataFrame, config: DriftConfig) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Composite injector  (used by Airflow DAGs to chain multiple drift types)
 # ---------------------------------------------------------------------------
+
 
 def inject_composite_drift(
     df: pd.DataFrame,
