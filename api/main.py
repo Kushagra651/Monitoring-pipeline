@@ -132,7 +132,7 @@ def ready():
 
 @app.post("/predict", response_model=PredictionOutput, tags=["inference"])
 def predict_endpoint(req: PredictionInput):
-    t_start = time.perf_counter()
+    # t_start = time.perf_counter()
 
     # Validated Pydantic model → plain dict for predict()
     features = req.model_dump()
@@ -144,7 +144,7 @@ def predict_endpoint(req: PredictionInput):
         log.error("Prediction failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
-    latency_ms = (time.perf_counter() - t_start) * 1000
+    # latency_ms = (time.perf_counter() - t_start) * 1000
 
     # result.prediction is int 0/1 — map to label strings schema expects
     predicted_label = ">50K" if result.prediction == 1 else "<=50K"

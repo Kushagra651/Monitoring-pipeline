@@ -37,8 +37,8 @@
 import os
 import json
 import logging
-import shutil
-import time
+# import shutil
+# import time
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -426,7 +426,7 @@ def register_model(version_tag: str,
 
     if force:
         should_promote = True
-        reason = f"Force promotion requested — skipping comparison (force=True)"
+        reason = "Force promotion requested — skipping comparison (force=True)"
         logger.warning("⚠️  %s", reason)
     else:
         should_promote, reason = _is_better_than_production(new_metrics, prod_metrics)
