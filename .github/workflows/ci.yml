@@ -68,7 +68,7 @@ jobs:
       - name: Install deps + mypy
         run: |
           pip install -r requirements.txt
-          pip install mypy==1.10.0 types-psycopg2
+          pip install mypy==1.10.0 types-psycopg2 types-requests
 
       - name: mypy
         run: |
@@ -76,6 +76,7 @@ jobs:
             --ignore-missing-imports \
             --no-strict-optional \
             --no-error-summary
+            --explicit-package-bases
 
 
   # ── Tests ───────────────────────────────────────────────────────────────────
