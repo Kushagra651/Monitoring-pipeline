@@ -1,0 +1,98 @@
+# dockerfiles/Dockerfile.api
+# Multi-stage build for the FastAPI inference + monitoring exporter service.
+#
+# Stages
+# ──────
+#   builder  : install Python deps into a venv (layer-cached on requirements change)
+#   runtime  : slim final image, copies only the venv + app code
+#
+# Build
+#   docker build -f dockerfiles/Dockerfile.api -t ml-api:latest .
+#
+# Run
+#   docker run --env-file .env -p 8000:8000 -p 9100:9100 ml-api:latest
+
+# ── Stage 1: builder ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS builder
+
+WORKDIR /build
+
+# System deps needed to compile scipy / scikit-learn wheels
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        gcc \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create isolated venv — keeps runtime image clean
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy requirements first — Docker cache busts only on file change
+COPY requirements.txt .
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
+FROM python:3.11-slim AS runtime
+
+LABEL maintainer="ml-platform" \
+      description="ML Monitoring API — FastAPI inference + Prometheus exporter" \
+      version="1.0.0"
+
+# libgomp needed at runtime by scikit-learn / LightGBM
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Non-root user for security
+RUN useradd --create-home --shell /bin/bash mluser
+WORKDIR /app
+
+# Copy venv from builder
+COPY --from=builder /opt/venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Copy application source
+COPY api/        ./api/
+COPY data/       ./data/
+COPY training/   ./training/
+COPY monitoring/ ./monitoring/
+COPY alerting/   ./alerting/
+
+# Artifacts dir — mounted as volume in docker-compose
+RUN mkdir -p /app/artifacts/models \
+               /app/artifacts/drift_reports \
+               /app/artifacts/quality_reports \
+               /app/artifacts/logs && \
+    chown -R mluser:mluser /app
+
+USER mluser
+
+# Env defaults (overridden by .env / docker-compose)
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ARTIFACTS_DIR=/app/artifacts \
+    API_HOST=0.0.0.0 \
+    API_PORT=8000 \
+    EXPORTER_PORT=9100 \
+    WORKERS=2
+
+# API (8000) + Prometheus exporter (9100)
+EXPOSE 8000 9100
+
+# Liveness probe target
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+    CMD curl -f http://localhost:${API_PORT}/health || exit 1
+
+# Startup: launch uvicorn for API, then exporter in background
+CMD ["sh", "-c", \
+     "python -m monitoring.prometheus_exporter --port ${EXPORTER_PORT} & \
+      exec uvicorn api.main:app \
+           --host ${API_HOST} \
+           --port ${API_PORT} \
+           --workers ${WORKERS} \
+           --log-level info \
+           --access-log"]

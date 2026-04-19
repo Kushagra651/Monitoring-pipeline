@@ -1,0 +1,72 @@
+# dockerfiles/Dockerfile.airflow
+# Extends the official Airflow image with project ML dependencies.
+#
+# Approach: use the official apache/airflow image as base (includes
+# Airflow + its pinned deps) and pip-install only the ML stack on top.
+# This avoids dependency conflicts that arise from building Airflow from scratch.
+#
+# Build
+#   docker build -f dockerfiles/Dockerfile.airflow -t ml-airflow:latest .
+#
+# Services that use this image (all share the same image, different commands):
+#   airflow-webserver  : airflow webserver
+#   airflow-scheduler  : airflow scheduler
+#   airflow-worker     : airflow celery worker  (optional, CeleryExecutor)
+#   airflow-init       : one-shot db init + admin user creation
+
+ARG AIRFLOW_VERSION=2.9.1
+ARG PYTHON_VERSION=3.11
+FROM apache/airflow:${AIRFLOW_VERSION}-python${PYTHON_VERSION}
+
+LABEL maintainer="ml-platform" \
+      description="ML Monitoring Airflow — includes scikit-learn, pandas, scipy" \
+      version="1.0.0"
+
+# Switch to root only for apt installs
+USER root
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libgomp1 \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Back to airflow user for pip
+USER airflow
+
+# Install ML stack on top of the base Airflow image.
+# Pin versions to match requirements.txt — avoids silent upgrades.
+COPY requirements.txt /tmp/requirements.txt
+
+# Filter out airflow itself (already installed) and re-install ML subset
+RUN pip install --no-cache-dir \
+        scikit-learn==1.4.2 \
+        pandas==2.2.2 \
+        numpy==1.26.4 \
+        scipy==1.13.1 \
+        joblib==1.4.2 \
+        fastapi==0.111.0 \
+        httpx==0.27.0
+
+# Copy project source into PYTHONPATH so DAGs can import from api/, data/, etc.
+COPY --chown=airflow:root api/        ${AIRFLOW_HOME}/project/api/
+COPY --chown=airflow:root data/       ${AIRFLOW_HOME}/project/data/
+COPY --chown=airflow:root training/   ${AIRFLOW_HOME}/project/training/
+COPY --chown=airflow:root monitoring/ ${AIRFLOW_HOME}/project/monitoring/
+COPY --chown=airflow:root alerting/   ${AIRFLOW_HOME}/project/alerting/
+
+# DAGs are mounted as a volume in docker-compose (live reload).
+# This COPY is a fallback for standalone builds.
+COPY --chown=airflow:root airflow/dags/ ${AIRFLOW_HOME}/dags/
+
+ENV PYTHONPATH="${AIRFLOW_HOME}/project:${PYTHONPATH}" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    ARTIFACTS_DIR=/app/artifacts
+
+# Artifacts dir — shared volume with ml_api container
+# RUN mkdir -p /app/artifacts
+RUN mkdir -p /opt/airflow/artifacts
+
+# Healthcheck for webserver (scheduler has no HTTP endpoint by default)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+    CMD curl -f http://localhost:8080/health || exit 1

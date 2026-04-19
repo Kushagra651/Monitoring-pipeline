@@ -1,0 +1,264 @@
+# .github/workflows/ci.yml
+# CI pipeline for ML Monitoring — runs on every push and PR to main/develop.
+#
+# Jobs
+# ────
+#   lint        : ruff (fast linter) + black (format check)
+#   type-check  : mypy on core modules
+#   test        : pytest unit + integration tests with Postgres service
+#   build-api   : docker build Dockerfile.api (no push on PR)
+#   build-airflow: docker build Dockerfile.airflow (no push on PR)
+#   push         : push both images to GHCR on merge to main
+
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+  REGISTRY: ghcr.io
+  IMAGE_API:     ghcr.io/${{ github.repository_owner }}/ml-api
+  IMAGE_AIRFLOW: ghcr.io/${{ github.repository_owner }}/ml-airflow
+
+# Cancel in-progress runs on the same branch (saves minutes)
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+
+  # ── Lint ────────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install linters
+        run: pip install ruff==0.4.4 black==24.4.2
+
+      - name: ruff check
+        run: ruff check . --output-format=github
+
+      - name: black check
+        run: black --check --diff .
+
+
+  # ── Type check ──────────────────────────────────────────────────────────────
+  type-check:
+    name: Type Check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install deps + mypy
+        run: |
+          pip install -r requirements.txt
+          pip install mypy==1.10.0 types-psycopg2
+
+      - name: mypy
+        run: |
+          mypy api/ data/ training/ monitoring/ alerting/ \
+            --ignore-missing-imports \
+            --no-strict-optional \
+            --no-error-summary
+
+
+  # ── Tests ───────────────────────────────────────────────────────────────────
+  test:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: lint
+
+    # Postgres service container — matches docker-compose config
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER:     mluser
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB:       ml_monitoring_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U mluser -d ml_monitoring_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT:         test
+      POSTGRES_HOST:       localhost
+      POSTGRES_PORT:       5432
+      POSTGRES_USER:       mluser
+      POSTGRES_PASSWORD:   testpassword
+      POSTGRES_DB:         ml_monitoring_test
+      ARTIFACTS_DIR:       /tmp/ml_artifacts
+      SLACK_WEBHOOK_URL:   ""
+      PAGERDUTY_ROUTING_KEY: ""
+      KS_P_THRESHOLD:      "0.05"
+      PSI_WARNING:         "0.1"
+      PSI_CRITICAL:        "0.2"
+      DRIFT_MIN_SAMPLES:   "10"    # lower threshold for test fixtures
+      MISSING_CRITICAL_PCT: "0.15"
+      ALERT_DEDUP_WINDOW_SEC: "0"  # disable dedup in tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov pytest-asyncio httpx
+
+      - name: Apply DB schema
+        run: |
+          PGPASSWORD=testpassword psql \
+            -h localhost -U mluser -d ml_monitoring_test \
+            -f init_db.sql
+
+      - name: Create artifacts dir
+        run: mkdir -p /tmp/ml_artifacts/models /tmp/ml_artifacts/drift_reports /tmp/ml_artifacts/quality_reports /tmp/ml_artifacts/logs
+
+      - name: Run tests
+        run: |
+          pytest tests/ \
+            -v \
+            --tb=short \
+            --cov=api --cov=data --cov=training --cov=monitoring --cov=alerting \
+            --cov-report=term-missing \
+            --cov-report=xml:coverage.xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        if: always()
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+
+
+  # ── Build API image ──────────────────────────────────────────────────────────
+  build-api:
+    name: Build API Image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerfiles/Dockerfile.api
+          push: false
+          tags: ${{ env.IMAGE_API }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+
+  # ── Build Airflow image ───────────────────────────────────────────────────────
+  build-airflow:
+    name: Build Airflow Image
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerfiles/Dockerfile.airflow
+          push: false
+          tags: ${{ env.IMAGE_AIRFLOW }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+
+  # ── Push to GHCR (main only) ─────────────────────────────────────────────────
+  push:
+    name: Push Images to GHCR
+    runs-on: ubuntu-latest
+    needs: [build-api, build-airflow]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (API)
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_API }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Extract metadata (Airflow)
+        id: meta-airflow
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_AIRFLOW }}
+          tags: |
+            type=sha,prefix=sha-
+            type=raw,value=latest
+
+      - name: Push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerfiles/Dockerfile.api
+          push: true
+          tags:   ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      - name: Push Airflow image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: dockerfiles/Dockerfile.airflow
+          push: true
+          tags:   ${{ steps.meta-airflow.outputs.tags }}
+          labels: ${{ steps.meta-airflow.outputs.labels }}
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max

@@ -1,0 +1,31 @@
+# grafana/datasources.yaml
+# Grafana datasource provisioning — loaded automatically on container start.
+# Place in /etc/grafana/provisioning/datasources/
+
+apiVersion: 1
+
+deleteDatasources:
+  - name: Prometheus
+    orgId: 1
+
+datasources:
+  - name:      Prometheus
+    type:      prometheus
+    uid:       prometheus
+    orgId:     1
+    url:       http://prometheus:9090
+    access:    proxy
+    isDefault: true
+    editable:  false
+    jsonData:
+      httpMethod:              POST
+      timeInterval:            "15s"       # matches global.scrape_interval
+      queryTimeout:            "60s"
+      exemplarTraceIdDestinations:
+        - name:          trace_id
+          datasourceUid: tempo          # wire up if Tempo is added later
+      prometheusType:          Prometheus
+      prometheusVersion:       "2.45.0"
+      cacheLevel:              "Low"
+      disableRecordingRules:   false
+      incrementalQueryOverlapWindow: "10m"

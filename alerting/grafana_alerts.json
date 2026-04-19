@@ -1,0 +1,804 @@
+{
+  "apiVersion": 1,
+  "groups": [
+    {
+      "orgId": 1,
+      "name": "ml_drift_alerts",
+      "folder": "ML Monitoring",
+      "interval": "5m",
+      "rules": [
+        {
+          "uid": "ml-drift-critical",
+          "title": "Critical Feature Drift Detected",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_drift_critical_count",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "{{ $labels.model_version }} — {{ $value }} feature(s) in CRITICAL drift",
+            "description": "PSI ≥ 0.2 on one or more features. Retraining may be required.",
+            "runbook_url": "https://wiki.company.com/ml-monitoring/drift-runbook"
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "ml-platform",
+            "alert_type": "drift"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-drift-warning",
+          "title": "Feature Drift Warning",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_drift_warning_count",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "15m",
+          "annotations": {
+            "summary": "{{ $labels.model_version }} — {{ $value }} feature(s) in WARNING drift",
+            "description": "PSI ≥ 0.1 on one or more features. Monitor closely."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "drift"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-drift-prediction",
+          "title": "Prediction Distribution Drift",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_drift_prediction",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "Prediction class distribution has drifted",
+            "description": "Chi-square test detected a shift in the predicted class distribution. Check for label shift or upstream data change."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "drift"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-drift-report-stale",
+          "title": "Drift Report Stale",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_drift_report_age_seconds",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        43200
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "Drift report not updated in > 12 hours",
+            "description": "ml_drift_check DAG may have failed or stopped running. Last age: {{ $value }}s"
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "pipeline"
+          },
+          "isPaused": false
+        }
+      ]
+    },
+    {
+      "orgId": 1,
+      "name": "ml_quality_alerts",
+      "folder": "ML Monitoring",
+      "interval": "5m",
+      "rules": [
+        {
+          "uid": "ml-quality-hard-failure",
+          "title": "Data Quality Hard Failure",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_quality_hard_failures",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "{{ $value }} hard data quality check(s) failed",
+            "description": "Hard failures block pipeline promotion. Investigate missing columns, duplicates, or schema violations immediately."
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "ml-platform",
+            "alert_type": "quality"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-quality-missing-rate",
+          "title": "High Feature Missing Rate",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "max(ml_monitor_quality_feature_missing_pct) by (feature)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0.15
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "Feature {{ $labels.feature }} missing rate {{ $value | humanizePercentage }}",
+            "description": "Missing rate exceeds 15% threshold. Check upstream data pipeline for feature {{ $labels.feature }}."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "quality"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-quality-report-stale",
+          "title": "Quality Report Stale",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_quality_report_age_seconds",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        43200
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "Quality report not updated in > 12 hours",
+            "description": "Monitoring DAG may have failed. Last report age: {{ $value }}s"
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "pipeline"
+          },
+          "isPaused": false
+        }
+      ]
+    },
+    {
+      "orgId": 1,
+      "name": "ml_api_alerts",
+      "folder": "ML Monitoring",
+      "interval": "1m",
+      "rules": [
+        {
+          "uid": "ml-api-error-rate",
+          "title": "High API Error Rate",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "rate(ml_monitor_api_errors_total[5m])",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        0.05
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Alerting",
+          "for": "5m",
+          "annotations": {
+            "summary": "API error rate {{ $value | humanize }} errors/sec",
+            "description": "Prediction API error rate exceeded 5% over last 5 minutes. Check API logs and model health."
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "ml-platform",
+            "alert_type": "api"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-api-latency-p99",
+          "title": "High API Latency (p99)",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "histogram_quantile(0.99, rate(ml_monitor_api_request_duration_ms_bucket[5m]))",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "gt",
+                      "params": [
+                        2000
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "5m",
+          "annotations": {
+            "summary": "API p99 latency {{ $value }}ms (threshold: 2000ms)",
+            "description": "99th-percentile latency is above 2 seconds. Check model load, feature pipeline performance."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "api"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-api-low-confidence",
+          "title": "Low Prediction Confidence",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_api_confidence_mean",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "lt",
+                      "params": [
+                        0.55
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "15m",
+          "annotations": {
+            "summary": "Mean prediction confidence dropped to {{ $value }}",
+            "description": "Model is producing low-confidence predictions. May indicate significant input distribution shift."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "model"
+          },
+          "isPaused": false
+        },
+        {
+          "uid": "ml-api-throughput-drop",
+          "title": "API Throughput Drop",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "rate(ml_monitor_api_requests_total[5m])",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "B",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "rate(ml_monitor_api_requests_total[5m] offset 1h)",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "math",
+                "expression": "($A - $B) / ($B + 0.0001)",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "lt",
+                      "params": [
+                        -0.5
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "C"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "NoData",
+          "execErrState": "Error",
+          "for": "10m",
+          "annotations": {
+            "summary": "API throughput dropped > 50% vs 1h ago",
+            "description": "Request rate has fallen sharply. Possible API outage or upstream routing issue."
+          },
+          "labels": {
+            "severity": "warning",
+            "team": "ml-platform",
+            "alert_type": "api"
+          },
+          "isPaused": false
+        }
+      ]
+    },
+    {
+      "orgId": 1,
+      "name": "ml_model_alerts",
+      "folder": "ML Monitoring",
+      "interval": "5m",
+      "rules": [
+        {
+          "uid": "ml-model-no-production",
+          "title": "No Production Model Loaded",
+          "condition": "C",
+          "data": [
+            {
+              "refId": "A",
+              "datasourceUid": "prometheus",
+              "model": {
+                "expr": "ml_monitor_api_model_loaded",
+                "intervalMs": 1000,
+                "maxDataPoints": 43200
+              }
+            },
+            {
+              "refId": "C",
+              "datasourceUid": "__expr__",
+              "model": {
+                "type": "threshold",
+                "conditions": [
+                  {
+                    "evaluator": {
+                      "type": "lt",
+                      "params": [
+                        1
+                      ]
+                    },
+                    "operator": {
+                      "type": "and"
+                    },
+                    "query": {
+                      "params": [
+                        "A"
+                      ]
+                    },
+                    "reducer": {
+                      "type": "last"
+                    }
+                  }
+                ]
+              }
+            }
+          ],
+          "noDataState": "Alerting",
+          "execErrState": "Alerting",
+          "for": "2m",
+          "annotations": {
+            "summary": "Production model is not loaded",
+            "description": "The API is running but no model is loaded. All predictions will fail."
+          },
+          "labels": {
+            "severity": "critical",
+            "team": "ml-platform",
+            "alert_type": "model"
+          },
+          "isPaused": false
+        }
+      ]
+    }
+  ],
+  "contactPoints": [
+    {
+      "orgId": 1,
+      "name": "ml-platform-slack",
+      "receivers": [
+        {
+          "uid": "cp-slack-ml",
+          "type": "slack",
+          "settings": {
+            "url": "${SLACK_WEBHOOK_URL}",
+            "channel": "#ml-alerts",
+            "username": "Grafana ML Monitor",
+            "icon_emoji": ":robot_face:",
+            "title": "{{ template \"slack.ml.title\" . }}",
+            "text": "{{ template \"slack.ml.text\" . }}"
+          },
+          "disableResolveMessage": false
+        }
+      ]
+    },
+    {
+      "orgId": 1,
+      "name": "ml-platform-pagerduty",
+      "receivers": [
+        {
+          "uid": "cp-pd-ml",
+          "type": "pagerduty",
+          "settings": {
+            "integrationKey": "${PAGERDUTY_ROUTING_KEY}",
+            "severity": "{{ .CommonLabels.severity }}",
+            "class": "ml-monitoring",
+            "component": "{{ .CommonLabels.alert_type }}"
+          },
+          "disableResolveMessage": false
+        }
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "orgId": 1,
+      "receiver": "ml-platform-slack",
+      "group_by": [
+        "alert_type",
+        "severity"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h",
+      "routes": [
+        {
+          "receiver": "ml-platform-pagerduty",
+          "matchers": [
+            "severity = critical"
+          ],
+          "group_wait": "10s",
+          "group_interval": "2m",
+          "repeat_interval": "1h",
+          "continue": true
+        },
+        {
+          "receiver": "ml-platform-slack",
+          "matchers": [
+            "severity =~ warning|info"
+          ],
+          "group_wait": "30s",
+          "group_interval": "5m",
+          "repeat_interval": "6h"
+        }
+      ]
+    }
+  ]
+}

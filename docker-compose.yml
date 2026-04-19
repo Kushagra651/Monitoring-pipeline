@@ -1,0 +1,273 @@
+# docker-compose.yml
+# Wires the full ML Monitoring stack:
+#
+#   ml_api              FastAPI inference + Prometheus exporter
+#   postgres            Shared DB (prediction logs + Airflow metadata)
+#   airflow-init        One-shot: db upgrade + admin user
+#   airflow-webserver   Airflow UI  :8080
+#   airflow-scheduler   DAG scheduling
+#   prometheus          Metrics store  :9090
+#   grafana             Dashboards     :3000
+#   node_exporter       Host metrics   :9101
+#   cadvisor            Container metrics :8081
+#
+# Usage
+# ─────
+#   cp .env.example .env          # fill secrets
+#   docker compose up -d          # start all
+#   docker compose logs -f ml_api # tail API logs
+#   docker compose down -v        # stop + remove volumes
+
+version: "3.9"
+
+x-airflow-common: &airflow-common
+  image: ml-airflow:latest
+  build:
+    context: .
+    dockerfile: dockerfiles/Dockerfile.airflow
+  env_file: .env
+  environment:
+    # Core
+    AIRFLOW__CORE__EXECUTOR:                    LocalExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES:               "false"
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__FERNET_KEY:                  "${AIRFLOW_FERNET_KEY}"
+    # DB
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN:        "postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_AIRFLOW_DB}"
+    AIRFLOW__DATABASE__LOAD_DEFAULT_CONNECTIONS: "false"
+    # Webserver
+    AIRFLOW__WEBSERVER__SECRET_KEY:             "${AIRFLOW_SECRET_KEY}"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG:          "false"
+    # Logging
+    AIRFLOW__LOGGING__LOGGING_LEVEL:            INFO
+    # Project
+    ARTIFACTS_DIR:    /app/artifacts
+    PYTHONPATH:       "/opt/airflow/project"
+    ENVIRONMENT:      "${ENVIRONMENT:-production}"
+  volumes:
+    - ./airflow/dags:/opt/airflow/dags          # live DAG reload
+    - artifacts:/app/artifacts                  # shared with ml_api
+    - airflow_logs:/opt/airflow/logs
+  depends_on:
+    postgres:
+      condition: service_healthy
+  restart: unless-stopped
+
+
+services:
+
+  # ── Postgres ────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: ml_postgres
+    env_file: .env
+    environment:
+      POSTGRES_USER:     "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB:       "${POSTGRES_DB}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init_db.sql:/docker-entrypoint-initdb.d/init_db.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+
+  # ── ML API ──────────────────────────────────────────────────────────────────
+  ml_api:
+    image: ml-api:latest
+    build:
+      context: .
+      dockerfile: dockerfiles/Dockerfile.api
+    container_name: ml_api
+    env_file: .env
+    environment:
+      ARTIFACTS_DIR:    /app/artifacts
+      DB_HOST:          postgres
+      DB_PORT:          "5432"
+      DB_NAME:          "${POSTGRES_DB}"
+      DB_USER:          "${POSTGRES_USER}"
+      DB_PASSWORD:      "${POSTGRES_PASSWORD}"
+      ENVIRONMENT:      "${ENVIRONMENT:-production}"
+      EXPORTER_PORT:    "9100"
+      WORKERS:          "2"
+    volumes:
+      - artifacts:/app/artifacts
+    ports:
+      - "8000:8000"   # FastAPI
+      - "9100:9100"   # Prometheus exporter
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    restart: unless-stopped
+
+
+  # ── Airflow init (runs once) ─────────────────────────────────────────────────
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow_init
+    command: >
+      bash -c "
+        airflow db upgrade &&
+        airflow users create\
+          --username admin\
+          --password ${AIRFLOW_ADMIN_PASSWORD:-admin}\
+          --firstname Admin\
+          --lastname User\
+          --role Admin\
+          --email admin@example.com || true
+      "
+    restart: "no"
+
+
+  # ── Airflow webserver ────────────────────────────────────────────────────────
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow_webserver
+    command: airflow webserver
+    ports:
+      - "8080:8080"
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 5
+
+
+  # ── Airflow scheduler ────────────────────────────────────────────────────────
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow_scheduler
+    command: airflow scheduler
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type SchedulerJob --hostname \"$(hostname)\""]
+      interval: 60s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+
+
+  # ── Prometheus ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.2
+    container_name: ml_prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--storage.tsdb.retention.size=10GB"
+      - "--web.enable-lifecycle"           # allows POST /-/reload
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on:
+      - ml_api
+    restart: unless-stopped
+
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: ml_grafana
+    env_file: .env
+    environment:
+      GF_SECURITY_ADMIN_USER:     "${GRAFANA_ADMIN_USER:-admin}"
+      GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD:-admin}"
+      GF_USERS_ALLOW_SIGN_UP:     "false"
+      GF_SERVER_HTTP_PORT:        "3000"
+      GF_ALERTING_ENABLED:        "false"   # use Unified Alerting
+      GF_UNIFIED_ALERTING_ENABLED: "false"  # avoid confusion for now
+    # docker-compose.yml — grafana service volumes
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    restart: unless-stopped
+
+
+  # ── Node Exporter ────────────────────────────────────────────────────────────
+  node_exporter:
+    image: prom/node-exporter:v1.8.0
+    container_name: ml_node_exporter
+    command:
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--path.rootfs=/rootfs"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    ports:
+      - "9101:9100"
+    restart: unless-stopped
+
+
+  # ── cAdvisor ─────────────────────────────────────────────────────────────────
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    container_name: ml_cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    restart: unless-stopped
+
+
+# ── Volumes ───────────────────────────────────────────────────────────────────
+volumes:
+  postgres_data:
+    driver: local
+  artifacts:
+    driver: local
+  airflow_logs:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+
+# ── Networks ──────────────────────────────────────────────────────────────────
+networks:
+  default:
+    name: ml_monitoring_net
+    driver: bridge

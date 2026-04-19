@@ -1,0 +1,110 @@
+# prometheus/prometheus.yml
+# Scrape config for ML Monitoring stack.
+#
+# Targets
+# ───────
+#   ml_api          : FastAPI /metrics endpoint  (prometheus_exporter + api/metrics.py)
+#   airflow         : Airflow StatsD → Prometheus exporter (if enabled)
+#   node_exporter   : Host-level CPU / memory / disk
+#   cadvisor        : Container resource metrics
+#   prometheus_self : Self-scrape
+
+global:
+  scrape_interval:     15s   # default poll cadence
+  evaluation_interval: 15s   # rule evaluation cadence
+  scrape_timeout:      10s
+
+  external_labels:
+    environment: "${ENVIRONMENT:-production}"
+    project:     "ml_monitoring"
+
+# ── Alertmanager ──────────────────────────────────────────────────────────────
+# Grafana Unified Alerting is used (grafana_alerts.json).
+# Uncomment below only if running a standalone Alertmanager sidecar.
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+# ── Recording + alerting rules ────────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+# ── Scrape configs ────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # ── 1. ML API / Prometheus Exporter ────────────────────────────────────────
+  # Scrapes the combined endpoint served by:
+  #   - api/main.py  GET /metrics          (in-process api/metrics.py)
+  #   - monitoring/prometheus_exporter.py  :9100/metrics (drift + quality reports)
+  # Both are behind the same FastAPI app in dev; split in prod via EXPORTER_PORT.
+
+  - job_name: "ml_api"
+    scrape_interval: 15s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ml_api:8000"]
+        labels:
+          service:  "ml_api"
+          layer:    "inference"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label:  instance
+
+  - job_name: "ml_exporter"
+    scrape_interval: 30s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ml_api:9100"]
+        labels:
+          service: "ml_exporter"
+          layer:   "monitoring"
+
+  # ── 2. Airflow ──────────────────────────────────────────────────────────────
+  # Requires statsd_exporter or airflow[prometheus] plugin.
+  # Set AIRFLOW__METRICS__STATSD_ON=True + statsd_exporter pointing here.
+
+  - job_name: "airflow"
+    scrape_interval: 30s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["airflow_statsd_exporter:9102"]
+        labels:
+          service: "airflow"
+          layer:   "orchestration"
+
+  # ── 3. Node Exporter ────────────────────────────────────────────────────────
+
+  - job_name: "node_exporter"
+    scrape_interval: 30s
+    static_configs:
+      - targets: ["node_exporter:9100"]
+        labels:
+          service: "node"
+          layer:   "infrastructure"
+
+  # ── 4. cAdvisor ─────────────────────────────────────────────────────────────
+
+  - job_name: "cadvisor"
+    scrape_interval: 30s
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["cadvisor:8080"]
+        labels:
+          service: "cadvisor"
+          layer:   "infrastructure"
+
+  # ── 5. Prometheus self-scrape ────────────────────────────────────────────────
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+          layer:   "observability"
+
+# ── Storage ───────────────────────────────────────────────────────────────────
+# Override via CLI flags in docker-compose; documented here for reference.
+# --storage.tsdb.path=/prometheus
+# --storage.tsdb.retention.time=30d
+# --storage.tsdb.retention.size=10GB

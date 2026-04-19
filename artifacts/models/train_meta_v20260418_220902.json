@@ -1,0 +1,27 @@
+{
+  "version_tag": "20260418_220902",
+  "trained_at": "2026-04-18T22:09:10.085783",
+  "n_rows_ingested": 30162,
+  "n_rows_validated": 30162,
+  "n_train": 24129,
+  "n_val": 6033,
+  "n_features": 14,
+  "val_accuracy": 0.863252,
+  "train_duration_s": 6.835,
+  "hyperparameters": {
+    "n_estimators": 200,
+    "max_depth": 4,
+    "learning_rate": 0.05,
+    "subsample": 0.8,
+    "random_state": 42
+  },
+  "model_path": "artifacts\\models\\model_v20260418_220902.pkl",
+  "pipeline_path": "artifacts\\models\\pipeline_v20260418_220902.pkl",
+  "target_column": "income",
+  "random_seed": 42,
+  "soft_check_warnings": [
+    {
+      "message": "Extra columns present (not part of schema): {'income'}"
+    }
+  ]
+}
