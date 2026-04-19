@@ -42,7 +42,7 @@ from data.ingest import run_ingestion_pipeline
 from data.validate import validate_dataframe
 from data.features import build_features, FeaturePipeline
 # from api.schemas import FEATURE_SCHEMA  # column contract / target name
-from api.schemas import PredictionInput, PredictionOutput  # for type hints and contract validation
+# from api.schemas import PredictionInput, PredictionOutput  # for type hints and contract validation
 
 # =============================================================================
 # LOGGING SETUP

@@ -48,7 +48,7 @@ from api.metrics import (
 from api.schemas import (
     PredictionInput,
     PredictionOutput,
-    PredictionLog,
+    # PredictionLog,
     HealthResponse,
 )
 

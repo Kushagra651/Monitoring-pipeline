@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-import sys
+# import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from threading import Event, Thread

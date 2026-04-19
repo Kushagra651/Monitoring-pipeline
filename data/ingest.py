@@ -19,7 +19,7 @@ UCI dataset source:
 from __future__ import annotations
 
 import logging
-import os
+# import os
 from pathlib import Path
 
 import pandas as pd

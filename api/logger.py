@@ -29,7 +29,7 @@ import logging
 import os
 import queue
 import threading
-import time
+# import time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
@@ -582,8 +582,8 @@ if __name__ == "__main__":
     # Verify JSONL was written
     assert JSONL_FILE.exists(), f"JSONL file not created at {JSONL_FILE}"
     with open(JSONL_FILE) as fh:
-        lines = [l for l in fh if l.strip()]
-    assert any(rid in l for l in lines), "request_id not found in JSONL"
+        lines = [line for line in fh if line.strip()]
+    assert any(rid in line for line in lines), "request_id not found in JSONL"
     logger.info("JSONL contains %d log entries", len(lines))
 
     # Query back

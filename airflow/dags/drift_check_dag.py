@@ -16,7 +16,7 @@ import os
 from datetime import timedelta
 
 from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator
+from airflow.operators.python import PythonOperator
 from airflow.operators.empty import EmptyOperator
 from airflow.utils.dates import days_ago
 
@@ -94,7 +94,7 @@ def task_fetch_live_window(**ctx):
     except Exception as e:
         log.warning("Logger unavailable (%s). Attempting JSONL fallback.", e)
         import glob, json
-        from pathlib import Path
+        # from pathlib import Path
         rows = []
         for f in sorted(glob.glob(f"{ARTIFACTS_DIR}/logs/*.jsonl"), reverse=True)[:7]:
             with open(f) as fh:

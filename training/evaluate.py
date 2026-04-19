@@ -47,9 +47,9 @@ from sklearn.metrics import (
     roc_auc_score,
     confusion_matrix,
     classification_report,
-    precision_recall_curve,
-    roc_curve,
-    brier_score_loss,
+    # precision_recall_curve,
+    # roc_curve,
+    brier_score_loss
 )
 from sklearn.calibration import calibration_curve
 
@@ -58,8 +58,9 @@ from data.ingest import ingest_data
 from data.validate import validate_dataframe
 from data.features import FeaturePipeline
 # from api.schemas import FEATURE_SCHEMA
-from api.schemas import PredictionInput, PredictionOutput  # for type hints and contract validation
-
+# from api.schemas import PredictionInput, PredictionOutput  # for type hints and contract validation
+# from api.schemas import FeatureSchema
+from data.features import build_features
 # =============================================================================
 # LOGGING
 # =============================================================================
@@ -78,7 +79,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="matplotlib")
 # CONSTANTS
 # =============================================================================
 MODEL_DIR  = Path(os.getenv("MODEL_DIR", "artifacts/models"))
-TARGET_COL = FEATURE_SCHEMA.target_column
+TARGET_COL = os.getenv("TARGET_COLUMN", "income")
 
 # Promotion thresholds — if the model doesn't meet these, register_model.py
 # will NOT push it to production. Configurable via env vars.
