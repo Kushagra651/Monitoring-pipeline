@@ -75,7 +75,7 @@ jobs:
           mypy api/ data/ training/ monitoring/ alerting/ \
             --ignore-missing-imports \
             --no-strict-optional \
-            --no-error-summary
+            --no-error-summary\
             --explicit-package-bases
 
 
