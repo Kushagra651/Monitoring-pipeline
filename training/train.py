@@ -234,7 +234,7 @@ def train(
     logger.info("Step 1/7 — Ingesting data …")
     t0 = time.perf_counter()
 
-    run_ingestion_pipeline(...)
+    run_ingestion_pipeline()
 
     import pandas as pd
 

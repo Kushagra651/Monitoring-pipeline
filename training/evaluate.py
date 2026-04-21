@@ -54,7 +54,7 @@ from sklearn.metrics import (
 from sklearn.calibration import calibration_curve
 
 # Internal imports
-from data.ingest import run_ingestion_pipeline
+from data.ingest import load_from_feature_store
 from data.validate import validate_dataframe
 from data.features import FeaturePipeline
 
@@ -450,7 +450,7 @@ def evaluate(version_tag: str, test_data_source: Optional[str] = None) -> dict:
     # The env var TEST_DATA_SOURCE should point to held-out data.
     logger.info("Step 2/6 — Loading test data …")
 
-    raw_test = ingest_data(source=test_data_source or os.getenv("TEST_DATA_SOURCE"))
+    raw_test = load_from_feature_store(split="test")
 
     report = validate_dataframe(raw_test)
     if not report.passed:

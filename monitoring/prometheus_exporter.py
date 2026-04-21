@@ -81,7 +81,7 @@ def _collect_api_metrics() -> str:
     try:
         from api.metrics import get_snapshot, to_prometheus_text
 
-        return get_metrics_registry().to_prometheus_text()
+        return get_snapshot().to_prometheus_text()
     except Exception as e:
         log.debug("API metrics unavailable (expected if running standalone): %s", e)
         return ""
