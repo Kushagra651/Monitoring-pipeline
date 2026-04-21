@@ -1,0 +1,4 @@
+@"
+[lint.per-file-ignores]
+"monitoring/prometheus_exporter.py" = ["PLC0415"]
+"@ | Out-File -FilePath ruff.toml -Encoding utf8
