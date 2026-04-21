@@ -79,9 +79,9 @@ def _collect_api_metrics() -> str:
     Gracefully returns empty string if the API process is not running in-process.
     """
     try:
-        from api.metrics import get_snapshot, to_prometheus_text
+        from api.metrics import to_prometheus_text
 
-        return get_snapshot().to_prometheus_text()
+        return to_prometheus_text()
     except Exception as e:
         log.debug("API metrics unavailable (expected if running standalone): %s", e)
         return ""
