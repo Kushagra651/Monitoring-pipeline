@@ -74,12 +74,8 @@ def _counter(
 
 
 def _collect_api_metrics() -> str:
-    """
-    Tries to import the singleton metrics registry.
-    Gracefully returns empty string if the API process is not running in-process.
-    """
     try:
-        from api.metrics import to_prometheus_text
+        from api.metrics import to_prometheus_text  # noqa: PLC0415
 
         return to_prometheus_text()
     except Exception as e:
