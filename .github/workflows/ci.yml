@@ -1,15 +1,4 @@
 # .github/workflows/ci.yml
-# CI pipeline for ML Monitoring — runs on every push and PR to main/develop.
-#
-# Jobs
-# ────
-#   lint        : ruff (fast linter) + black (format check)
-#   type-check  : mypy on core modules
-#   test        : pytest unit + integration tests with Postgres service
-#   build-api   : docker build Dockerfile.api (no push on PR)
-#   build-airflow: docker build Dockerfile.airflow (no push on PR)
-#   push         : push both images to GHCR on merge to main
-
 name: CI
 
 on:
@@ -21,17 +10,13 @@ on:
 env:
   PYTHON_VERSION: "3.11"
   REGISTRY: ghcr.io
-  IMAGE_API:     ghcr.io/${{ github.repository_owner }}/ml-api
-  IMAGE_AIRFLOW: ghcr.io/${{ github.repository_owner }}/ml-airflow
 
-# Cancel in-progress runs on the same branch (saves minutes)
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
 
-  # ── Lint ────────────────────────────────────────────────────────────────────
   lint:
     name: Lint & Format
     runs-on: ubuntu-latest
@@ -53,7 +38,6 @@ jobs:
         run: black --check --diff .
 
 
-  # ── Type check ──────────────────────────────────────────────────────────────
   type-check:
     name: Type Check (mypy)
     runs-on: ubuntu-latest
@@ -71,21 +55,14 @@ jobs:
           pip install mypy==1.10.0 types-psycopg2 types-requests
 
       - name: mypy
-        run: |
-          mypy api/ data/ training/ monitoring/ alerting/ \
-            --ignore-missing-imports \
-            --no-strict-optional \
-            --no-error-summary\
-            --explicit-package-bases
+        run: mypy api/ data/ training/ monitoring/ alerting/ --ignore-missing-imports --no-strict-optional --no-error-summary --explicit-package-bases
 
 
-  # ── Tests ───────────────────────────────────────────────────────────────────
   test:
     name: Tests (pytest)
     runs-on: ubuntu-latest
     needs: lint
 
-    # Postgres service container — matches docker-compose config
     services:
       postgres:
         image: postgres:16-alpine
@@ -102,21 +79,21 @@ jobs:
           --health-retries 5
 
     env:
-      ENVIRONMENT:         test
-      POSTGRES_HOST:       localhost
-      POSTGRES_PORT:       5432
-      POSTGRES_USER:       mluser
-      POSTGRES_PASSWORD:   testpassword
-      POSTGRES_DB:         ml_monitoring_test
-      ARTIFACTS_DIR:       /tmp/ml_artifacts
-      SLACK_WEBHOOK_URL:   ""
-      PAGERDUTY_ROUTING_KEY: ""
-      KS_P_THRESHOLD:      "0.05"
-      PSI_WARNING:         "0.1"
-      PSI_CRITICAL:        "0.2"
-      DRIFT_MIN_SAMPLES:   "10"    # lower threshold for test fixtures
-      MISSING_CRITICAL_PCT: "0.15"
-      ALERT_DEDUP_WINDOW_SEC: "0"  # disable dedup in tests
+      ENVIRONMENT:            test
+      POSTGRES_HOST:          localhost
+      POSTGRES_PORT:          5432
+      POSTGRES_USER:          mluser
+      POSTGRES_PASSWORD:      testpassword
+      POSTGRES_DB:            ml_monitoring_test
+      ARTIFACTS_DIR:          /tmp/ml_artifacts
+      SLACK_WEBHOOK_URL:      ""
+      PAGERDUTY_ROUTING_KEY:  ""
+      KS_P_THRESHOLD:         "0.05"
+      PSI_WARNING:            "0.1"
+      PSI_CRITICAL:           "0.2"
+      DRIFT_MIN_SAMPLES:      "10"
+      MISSING_CRITICAL_PCT:   "0.15"
+      ALERT_DEDUP_WINDOW_SEC: "0"
 
     steps:
       - uses: actions/checkout@v4
@@ -130,10 +107,7 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-cov pytest-asyncio httpx
 
       - name: Apply DB schema
-        run: |
-          PGPASSWORD=testpassword psql \
-            -h localhost -U mluser -d ml_monitoring_test \
-            -f init_db.sql
+        run: PGPASSWORD=testpassword psql -h localhost -U mluser -d ml_monitoring_test -f init_db.sql
 
       - name: Create artifacts dir
         run: mkdir -p /tmp/ml_artifacts/models /tmp/ml_artifacts/drift_reports /tmp/ml_artifacts/quality_reports /tmp/ml_artifacts/logs
@@ -154,13 +128,15 @@ jobs:
           fail_ci_if_error: false
 
 
-  # ── Build API image ──────────────────────────────────────────────────────────
   build-api:
     name: Build API Image
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_API=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ml-api" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -176,13 +152,15 @@ jobs:
           cache-to:   type=gha,mode=max
 
 
-  # ── Build Airflow image ───────────────────────────────────────────────────────
   build-airflow:
     name: Build Airflow Image
     runs-on: ubuntu-latest
     needs: test
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_AIRFLOW=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ml-airflow" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -198,7 +176,6 @@ jobs:
           cache-to:   type=gha,mode=max
 
 
-  # ── Push to GHCR (main only) ─────────────────────────────────────────────────
   push:
     name: Push Images to GHCR
     runs-on: ubuntu-latest
@@ -211,6 +188,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set lowercase image names
+        run: |
+          echo "IMAGE_API=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ml-api" >> $GITHUB_ENV
+          echo "IMAGE_AIRFLOW=ghcr.io/$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')/ml-airflow" >> $GITHUB_ENV
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
